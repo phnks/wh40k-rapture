@@ -1,0 +1,14 @@
+Assets/Materials/
+Assets/Prefabs/
+Assets/QuickOutline/
+Assets/Scenes/
+Assets/stls/
+Assets/TextMesh Pro/
+Library/
+Logs/
+Packages/
+ProjectSettings/
+Screenshots/
+Temp/
+UserSettings/
+*.meta
