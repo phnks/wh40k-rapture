@@ -184,7 +184,8 @@ public class GameController : MonoBehaviour
         }
     }
 
-    void DeselectAllModels()
+    // **Updated Access Modifier: Made public to allow external access**
+    public void DeselectAllModels()
     {
         if (selectedModel != null)
         {
@@ -241,12 +242,18 @@ public class GameController : MonoBehaviour
     {
         currentRound++;
         currentPhase = Phase.Movement;
+        shootingController.ResetUsedWeapons(); // Reset used weapons at end of round
         UpdateUI();
     }
 
     public int GetCurrentPlayer()
     {
         return currentPlayer;
+    }
+
+    public Phase GetCurrentPhase()
+    {
+        return currentPhase;
     }
 
     void UpdateUI()

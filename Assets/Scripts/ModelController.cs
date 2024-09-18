@@ -65,6 +65,12 @@ public class ModelController : MonoBehaviour
 
     private void ShowMovementRange()
     {
+        // **CHANGE: Show movement range only during the Movement Phase**
+        if (GameController.Instance.GetCurrentPhase() != GameController.Phase.Movement)
+        {
+            return;
+        }
+
         if (rangeIndicator == null)
         {
             rangeIndicator = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
@@ -134,15 +140,17 @@ public class ModelController : MonoBehaviour
         targetPosition.y = transform.position.y; // Ensure movement stays on the XZ plane
 
         float distance = Vector3.Distance(new Vector3(transform.position.x, 0, transform.position.z), new Vector3(targetPosition.x, 0, targetPosition.z));
-        float distanceToStart = Vector3.Distance(new Vector3(transform.position.x, 0, transform.position.z), new Vector3(startPosition.x, 0, startPosition.z));
-        float newDistanceToStart = Vector3.Distance(new Vector3(targetPosition.x, 0, targetPosition.z), new Vector3(startPosition.x, 0, startPosition.z));
+        float distanceToStart = Vector3.Distance(new Vector3(transform.position.x, 0, transform.position.z), 
+                                                 new Vector3(startPosition.x, 0, startPosition.z));
+        float newDistanceToStart = Vector3.Distance(new Vector3(targetPosition.x, 0, targetPosition.z), 
+                                                    new Vector3(startPosition.x, 0, startPosition.z));
 
         float potentialRemainingMovement = remainingMovement;
 
         if (newDistanceToStart < distanceToStart)
         {
             float distanceDiff = distanceToStart - newDistanceToStart;
-            potentialRemainingMovement = Mathf.Min(remainingMovement + distanceDiff, movementRange * GameConstants.MOVEMENT_CONVERSION_FACTOR);
+            potentialRemainingMovement = Mathf.Min(potentialRemainingMovement + distanceDiff, movementRange * GameConstants.MOVEMENT_CONVERSION_FACTOR);
         }
 
         if (distance <= potentialRemainingMovement)

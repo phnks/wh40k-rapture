@@ -37,9 +37,9 @@ public class ShootingController : MonoBehaviour
         {
             rangeIndicator = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             rangeIndicator.transform.position = new Vector3(selectedModel.transform.position.x, 58.0f, selectedModel.transform.position.z); // Set height to 58
-            float radius = selectedWeapon.range * GameConstants.MOVEMENT_CONVERSION_FACTOR; // Use world space distance for range
-            rangeIndicator.transform.localScale = new Vector3(radius * 2, 0.01f, radius * 2); // Properly scale to match world space distance
-            
+            float radius = selectedWeapon.range; // Use world space distance directly, already converted in WeaponController
+            rangeIndicator.transform.localScale = new Vector3(radius * 2, 0.01f, radius * 2); // Properly scale to match range
+
             // Create a transparent material
             Material transparentMaterial = new Material(Shader.Find("Standard"));
             Color factionColor = selectedModel.faction == ModelController.Faction.AdeptusMechanicus ? Color.red : Color.green;
@@ -59,7 +59,7 @@ public class ShootingController : MonoBehaviour
         else
         {
             rangeIndicator.transform.position = new Vector3(selectedModel.transform.position.x, 58.0f, selectedModel.transform.position.z);
-            float radius = selectedWeapon.range * GameConstants.MOVEMENT_CONVERSION_FACTOR; // Use world space distance for range
+            float radius = selectedWeapon.range; // Use world space distance directly, already converted
             rangeIndicator.transform.localScale = new Vector3(radius * 2, 0.01f, radius * 2); // Update size to match range
             rangeIndicator.SetActive(true); // Reactivate if already created
         }
@@ -87,7 +87,7 @@ public class ShootingController : MonoBehaviour
 
         // Range check
         float distance = Vector3.Distance(selectedModel.transform.position, targetModel.transform.position);
-        if (distance > selectedWeapon.range * GameConstants.MOVEMENT_CONVERSION_FACTOR)
+        if (distance > selectedWeapon.range)
         {
             GameController.Instance.ShowPlayerErrorMessage("Target is out of range!");
             return;
@@ -111,6 +111,7 @@ public class ShootingController : MonoBehaviour
         {
             Debug.Log("All shots missed.");
             DisableUsedWeapon(); // Disable weapon after use
+            GameController.Instance.DeselectAllModels(); // Deselect the model after shooting
             return;
         }
 
@@ -130,6 +131,7 @@ public class ShootingController : MonoBehaviour
         {
             Debug.Log("No wounds inflicted.");
             DisableUsedWeapon(); // Disable weapon after use
+            GameController.Instance.DeselectAllModels(); // Deselect the model after shooting
             return;
         }
 
@@ -161,6 +163,7 @@ public class ShootingController : MonoBehaviour
         selectedWeapon = null; // Reset selection after shooting
         selectedModel = null;
         HideWeaponRangeIndicator(); // Hide range indicator after shooting
+        GameController.Instance.DeselectAllModels(); // Deselect the model after shooting
     }
 
     private void DisableUsedWeapon()
@@ -180,6 +183,18 @@ public class ShootingController : MonoBehaviour
         if (weaponStrength < targetToughness) return roll >= 5;
         if (weaponStrength * 2 < targetToughness) return false; // Impossible roll to wound
         return roll == 6; // Minimum roll for low strength weapons
+    }
+
+    // **NEW: Public method to check if a weapon is used**
+    public bool IsWeaponUsed(WeaponController weapon)
+    {
+        return usedWeapons.Contains(weapon);
+    }
+
+    // **NEW: Reset used weapons at the end of the round**
+    public void ResetUsedWeapons()
+    {
+        usedWeapons.Clear();
     }
 }
 

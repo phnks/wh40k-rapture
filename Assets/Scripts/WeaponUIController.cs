@@ -46,6 +46,10 @@ public class WeaponUIController : MonoBehaviour
         TextMeshProUGUI buttonText = buttonObject.GetComponentInChildren<TextMeshProUGUI>();
         buttonText.text = weapon.weaponName;
 
+        // **NEW: Disable the button if the weapon has been used**
+        bool isUsed = ShootingController.Instance.IsWeaponUsed(weapon);
+        button.interactable = !isUsed;
+
         button.onClick.AddListener(() => OnWeaponButtonClicked(weapon, model));
         weaponButtons.Add(button);
     }
