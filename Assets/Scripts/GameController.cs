@@ -18,11 +18,13 @@ public class GameController : MonoBehaviour
 
     public static GameController Instance; // Singleton instance
 
+    [Header("UI Elements")]
     public TextMeshProUGUI roundText;  
     public TextMeshProUGUI phaseText;  
     public TextMeshProUGUI playerText;  
     public TextMeshProUGUI playerErrorText; // Reference to the Player Error Text UI
 
+    [Header("Buttons and Panels")]
     public Button endTurnButton; // Reference to the End Turn button
     public GameObject weaponUIPanel; // Reference to the UI panel displaying weapons
     public WeaponUIController weaponUIController; // Reference to the Weapon UI controller
@@ -43,7 +45,15 @@ public class GameController : MonoBehaviour
 
     void Awake()
     {
-        Instance = this; // Set up the singleton instance
+        // Set up the singleton instance
+        if (Instance == null)
+        {
+            Instance = this;
+        }
+        else
+        {
+            Destroy(gameObject);
+        }
     }
 
     void Start()
@@ -53,9 +63,15 @@ public class GameController : MonoBehaviour
         InitializePlayerModels(); // Initialize and track player models
         EnableEndTurnButton(); // Always enable End Turn button initially
         HidePlayerErrorMessage(); // Hide the player error message initially
-        shootingController = GetComponent<ShootingController>(); // Get the ShootingController
 
-        // Make sure WeaponUIController is properly initialized
+        // Get the ShootingController component
+        shootingController = GetComponent<ShootingController>(); 
+        if (shootingController == null)
+        {
+            Debug.LogError("ShootingController component is missing on GameController!");
+        }
+
+        // Initialize the WeaponUIController
         if (weaponUIController != null)
         {
             weaponUIController.Initialize(); // Initialize the Weapon UI Controller
@@ -73,16 +89,25 @@ public class GameController : MonoBehaviour
         HandleRotation(); // Handle rotating the selected model with mouse wheel
     }
 
+    /// <summary>
+    /// Enables the End Turn button.
+    /// </summary>
     public void EnableEndTurnButton()
     {
         endTurnButton.interactable = true; // Enable the button
     }
 
+    /// <summary>
+    /// Disables the End Turn button.
+    /// </summary>
     public void DisableEndTurnButton()
     {
         endTurnButton.interactable = false; // Disable the button
     }
 
+    /// <summary>
+    /// Handles the selection of models and interaction based on input.
+    /// </summary>
     void HandleSelection()
     {
         if (Input.GetMouseButtonDown(0) && !EventSystem.current.IsPointerOverGameObject())
@@ -116,6 +141,10 @@ public class GameController : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Handles the movement of the selected model to the target position.
+    /// </summary>
+    /// <param name="targetPosition">The target position to move the model to.</param>
     void HandleMovement(Vector3 targetPosition)
     {
         if (selectedModel == null)
@@ -124,16 +153,19 @@ public class GameController : MonoBehaviour
             return;
         }
 
+        // Calculate distance between current position and target position on the XZ plane
         float distance = Vector3.Distance(new Vector3(selectedModel.transform.position.x, 0, selectedModel.transform.position.z), 
                                           new Vector3(targetPosition.x, 0, targetPosition.z));
 
+        // Calculate distance from start position to current position and to the target position
         float distanceToStart = Vector3.Distance(new Vector3(selectedModel.transform.position.x, 0, selectedModel.transform.position.z), 
                                                  new Vector3(selectedModel.GetStartPosition().x, 0, selectedModel.GetStartPosition().z));
         float newDistanceToStart = Vector3.Distance(new Vector3(targetPosition.x, 0, targetPosition.z), 
                                                     new Vector3(selectedModel.GetStartPosition().x, 0, selectedModel.GetStartPosition().z));
-        
+
+        // Calculate potential remaining movement based on moving closer to the start position
         float potentialRemainingMovement = selectedModel.GetRemainingMovement();
-        
+
         if (newDistanceToStart < distanceToStart)
         {
             float distanceDiff = distanceToStart - newDistanceToStart;
@@ -144,6 +176,7 @@ public class GameController : MonoBehaviour
         {
             selectedModel.MoveTo(targetPosition); // Move the selected model
             HidePlayerErrorMessage(); // Hide any previous error message
+            EnableEndTurnButton(); // Re-enable the end turn button after a valid move
         }
         else
         {
@@ -152,6 +185,9 @@ public class GameController : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Handles deselecting the selected model when the Escape key is pressed.
+    /// </summary>
     void HandleDeselect()
     {
         if (Input.GetKeyDown(KeyCode.Escape) && selectedModel != null) // Deselect with Escape key
@@ -160,6 +196,10 @@ public class GameController : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Selects a model for interaction.
+    /// </summary>
+    /// <param name="model">The model to select.</param>
     void SelectModel(ModelController model)
     {
         if (selectedModel != null)
@@ -184,7 +224,9 @@ public class GameController : MonoBehaviour
         }
     }
 
-    // Updated Access Modifier: Made public to allow external access
+    /// <summary>
+    /// Deselects all models and hides relevant UI elements.
+    /// </summary>
     public void DeselectAllModels()
     {
         if (selectedModel != null)
@@ -196,6 +238,9 @@ public class GameController : MonoBehaviour
         shootingController.HideWeaponRangeIndicator(); // Hide the weapon range indicator when deselected
     }
 
+    /// <summary>
+    /// Handles rotating the selected model based on mouse scroll input.
+    /// </summary>
     void HandleRotation()
     {
         if (selectedModel != null)
@@ -208,6 +253,9 @@ public class GameController : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Advances to the next turn, handling player and phase transitions.
+    /// </summary>
     public void NextTurn()
     {
         if (selectedModel != null)
@@ -225,6 +273,9 @@ public class GameController : MonoBehaviour
         UpdateUI();
     }
 
+    /// <summary>
+    /// Advances to the next phase or ends the round if in the last phase.
+    /// </summary>
     public void NextPhase()
     {
         if (currentPhase == Phase.AdvanceFire)
@@ -238,6 +289,9 @@ public class GameController : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Ends the current round, resets states, and prepares for the next round.
+    /// </summary>
     public void EndRound()
     {
         currentRound++;
@@ -252,16 +306,27 @@ public class GameController : MonoBehaviour
         UpdateUI();
     }
 
+    /// <summary>
+    /// Returns the current player ID.
+    /// </summary>
+    /// <returns>The current player's ID.</returns>
     public int GetCurrentPlayer()
     {
         return currentPlayer;
     }
 
+    /// <summary>
+    /// Returns the current phase of the game.
+    /// </summary>
+    /// <returns>The current game phase.</returns>
     public Phase GetCurrentPhase()
     {
         return currentPhase;
     }
 
+    /// <summary>
+    /// Updates the UI elements to reflect the current game state.
+    /// </summary>
     void UpdateUI()
     {
         roundText.text = "Round: " + currentRound;
@@ -269,6 +334,9 @@ public class GameController : MonoBehaviour
         playerText.text = "Current Player: " + currentPlayer;
     }
 
+    /// <summary>
+    /// Initializes and categorizes all models based on their player IDs.
+    /// </summary>
     void InitializePlayerModels()
     {
         ModelController[] allModels = FindObjectsOfType<ModelController>(); 
@@ -285,7 +353,10 @@ public class GameController : MonoBehaviour
         }
     }
 
-    // Show the player error message on the screen
+    /// <summary>
+    /// Displays an error message to the player.
+    /// </summary>
+    /// <param name="message">The error message to display.</param>
     public void ShowPlayerErrorMessage(string message)
     {
         playerErrorText.text = message;
@@ -293,27 +364,40 @@ public class GameController : MonoBehaviour
         StartCoroutine(HidePlayerErrorMessageAfterDelay(2f)); // Hide after 2 seconds
     }
 
+    /// <summary>
+    /// Coroutine to hide the player error message after a delay.
+    /// </summary>
+    /// <param name="delay">Delay in seconds before hiding the message.</param>
+    /// <returns>IEnumerator for the coroutine.</returns>
     IEnumerator HidePlayerErrorMessageAfterDelay(float delay)
     {
         yield return new WaitForSeconds(delay);
         HidePlayerErrorMessage();
     }
 
-    // Hide the player error message
+    /// <summary>
+    /// Hides the player error message.
+    /// </summary>
     public void HidePlayerErrorMessage()
     {
         playerErrorText.gameObject.SetActive(false);
     }
 
+    /// <summary>
+    /// Displays the weapons UI for the selected model.
+    /// </summary>
+    /// <param name="model">The selected model.</param>
     void ShowWeaponsUI(ModelController model)
     {
         weaponUIController.ShowWeaponOptions(model);
     }
 
-    // **NEW: Reset all models' movement and states**
+    /// <summary>
+    /// Resets all models' movement and states at the end of a round.
+    /// </summary>
     private void ResetAllModels()
     {
-        // Iterate through player1Models list
+        // Iterate through player1Models list in reverse to safely remove null references
         for (int i = player1Models.Count - 1; i >= 0; i--)
         {
             GameObject modelObj = player1Models[i];
@@ -331,7 +415,7 @@ public class GameController : MonoBehaviour
             }
         }
 
-        // Iterate through player2Models list
+        // Iterate through player2Models list in reverse to safely remove null references
         for (int i = player2Models.Count - 1; i >= 0; i--)
         {
             GameObject modelObj = player2Models[i];
@@ -350,7 +434,10 @@ public class GameController : MonoBehaviour
         }
     }
 
-    // **NEW: Remove a model from the player lists**
+    /// <summary>
+    /// Removes a destroyed model from the player lists.
+    /// </summary>
+    /// <param name="model">The model to remove.</param>
     public void RemoveModel(ModelController model)
     {
         if (model.playerID == 1)
