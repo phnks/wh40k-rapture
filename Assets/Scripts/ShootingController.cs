@@ -61,6 +61,12 @@ public class ShootingController : MonoBehaviour
             rangeIndicator.transform.position = new Vector3(selectedModel.transform.position.x, 58.0f, selectedModel.transform.position.z);
             float radius = selectedWeapon.range; // Use world space distance directly, already converted
             rangeIndicator.transform.localScale = new Vector3(radius * 2, 0.01f, radius * 2); // Update size to match range
+
+            // Update color based on the current selected model's faction
+            Renderer rangeRenderer = rangeIndicator.GetComponent<Renderer>();
+            Color factionColor = selectedModel.faction == ModelController.Faction.AdeptusMechanicus ? Color.red : Color.green;
+            rangeRenderer.material.color = new Color(factionColor.r, factionColor.g, factionColor.b, 0.3f);
+
             rangeIndicator.SetActive(true); // Reactivate if already created
         }
 
@@ -185,13 +191,13 @@ public class ShootingController : MonoBehaviour
         return roll == 6; // Minimum roll for low strength weapons
     }
 
-    // **NEW: Public method to check if a weapon is used**
+    // Public method to check if a weapon is used
     public bool IsWeaponUsed(WeaponController weapon)
     {
         return usedWeapons.Contains(weapon);
     }
 
-    // **NEW: Reset used weapons at the end of the round**
+    // Reset used weapons at the end of the round
     public void ResetUsedWeapons()
     {
         usedWeapons.Clear();

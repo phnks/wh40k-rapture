@@ -184,7 +184,7 @@ public class GameController : MonoBehaviour
         }
     }
 
-    // **Updated Access Modifier: Made public to allow external access**
+    // Updated Access Modifier: Made public to allow external access
     public void DeselectAllModels()
     {
         if (selectedModel != null)
@@ -242,7 +242,13 @@ public class GameController : MonoBehaviour
     {
         currentRound++;
         currentPhase = Phase.Movement;
-        shootingController.ResetUsedWeapons(); // Reset used weapons at end of round
+
+        // Reset used weapons
+        shootingController.ResetUsedWeapons();
+
+        // Reset each model's movement and states
+        ResetAllModels();
+
         UpdateUI();
     }
 
@@ -302,6 +308,59 @@ public class GameController : MonoBehaviour
     void ShowWeaponsUI(ModelController model)
     {
         weaponUIController.ShowWeaponOptions(model);
+    }
+
+    // **NEW: Reset all models' movement and states**
+    private void ResetAllModels()
+    {
+        // Iterate through player1Models list
+        for (int i = player1Models.Count - 1; i >= 0; i--)
+        {
+            GameObject modelObj = player1Models[i];
+            if (modelObj == null)
+            {
+                player1Models.RemoveAt(i); // Remove null references
+                continue;
+            }
+
+            ModelController model = modelObj.GetComponent<ModelController>();
+            if (model != null)
+            {
+                model.ResetMovement(); // Reset movement and hasMoved
+                model.UpdateStartPosition(); // Update start position to current position
+            }
+        }
+
+        // Iterate through player2Models list
+        for (int i = player2Models.Count - 1; i >= 0; i--)
+        {
+            GameObject modelObj = player2Models[i];
+            if (modelObj == null)
+            {
+                player2Models.RemoveAt(i); // Remove null references
+                continue;
+            }
+
+            ModelController model = modelObj.GetComponent<ModelController>();
+            if (model != null)
+            {
+                model.ResetMovement(); // Reset movement and hasMoved
+                model.UpdateStartPosition(); // Update start position to current position
+            }
+        }
+    }
+
+    // **NEW: Remove a model from the player lists**
+    public void RemoveModel(ModelController model)
+    {
+        if (model.playerID == 1)
+        {
+            player1Models.Remove(model.gameObject);
+        }
+        else if (model.playerID == 2)
+        {
+            player2Models.Remove(model.gameObject);
+        }
     }
 }
 

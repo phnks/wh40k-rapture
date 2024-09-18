@@ -14,6 +14,7 @@ public class ModelController : MonoBehaviour
 
     public int playerID; // ID of the player who owns this model (1 or 2)
     public float movementRange = 6f; // Maximum distance the model can move in a turn
+    private float initialMovement; // Store the initial movement value
     private float remainingMovement; // Remaining movement allowed in the current phase
     public Faction faction; // Faction of the model
 
@@ -41,10 +42,20 @@ public class ModelController : MonoBehaviour
     {
         outline = GetComponent<Outline>();
         outline.enabled = false; // Disable outline by default
-        remainingMovement = movementRange * GameConstants.MOVEMENT_CONVERSION_FACTOR; // Convert range to world space distance
+        initialMovement = movementRange * GameConstants.MOVEMENT_CONVERSION_FACTOR; // Store initial movement
+        remainingMovement = initialMovement; // Initialize remaining movement
         startPosition = transform.position; // Store the starting position at the start of the phase
         originalWounds = wounds; // Store the original wounds
         UpdateColors(); // Set initial colors based on faction
+    }
+
+    void OnDestroy()
+    {
+        // Notify GameController to remove this model from the lists
+        if (GameController.Instance != null)
+        {
+            GameController.Instance.RemoveModel(this);
+        }
     }
 
     public void SelectModel()
@@ -65,7 +76,7 @@ public class ModelController : MonoBehaviour
 
     private void ShowMovementRange()
     {
-        // **CHANGE: Show movement range only during the Movement Phase**
+        // Show movement range only during the Movement Phase
         if (GameController.Instance.GetCurrentPhase() != GameController.Phase.Movement)
         {
             return;
@@ -150,7 +161,7 @@ public class ModelController : MonoBehaviour
         if (newDistanceToStart < distanceToStart)
         {
             float distanceDiff = distanceToStart - newDistanceToStart;
-            potentialRemainingMovement = Mathf.Min(potentialRemainingMovement + distanceDiff, movementRange * GameConstants.MOVEMENT_CONVERSION_FACTOR);
+            potentialRemainingMovement = Mathf.Min(potentialRemainingMovement + distanceDiff, initialMovement);
         }
 
         if (distance <= potentialRemainingMovement)
@@ -158,7 +169,7 @@ public class ModelController : MonoBehaviour
             if (newDistanceToStart < distanceToStart)
             {
                 float distanceDiff = distanceToStart - newDistanceToStart;
-                remainingMovement = Mathf.Min(remainingMovement + distanceDiff, movementRange * GameConstants.MOVEMENT_CONVERSION_FACTOR);
+                remainingMovement = Mathf.Min(remainingMovement + distanceDiff, initialMovement);
             }
             else
             {
@@ -210,7 +221,7 @@ public class ModelController : MonoBehaviour
         if (rangeIndicator != null)
         {
             Renderer rangeRenderer = rangeIndicator.GetComponent<Renderer>();
-            rangeRenderer.material.color = factionColor;
+            rangeRenderer.material.color = new Color(factionColor.r, factionColor.g, factionColor.b, 0.3f);
         }
 
         if (moveIndicator != null)
@@ -257,9 +268,23 @@ public class ModelController : MonoBehaviour
         return hasMoved;
     }
 
+    // **UPDATED: Reset movement and hasMoved**
     public void ResetMovement()
     {
-        hasMoved = false;
+        remainingMovement = initialMovement; // Reset movement to initial value
+        hasMoved = false; // Reset hasMoved flag
+        HideMovementRange(); // Hide movement range indicator
+    }
+
+    // **NEW: Update start position to current position**
+    public void UpdateStartPosition()
+    {
+        startPosition = transform.position; // Update start position to current position
+        // Update the movement range indicator if it's active
+        if (rangeIndicator != null && rangeIndicator.activeSelf)
+        {
+            rangeIndicator.transform.position = new Vector3(transform.position.x, 58.0f, transform.position.z);
+        }
     }
 
     public bool IsDestroyed()

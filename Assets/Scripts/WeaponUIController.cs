@@ -20,7 +20,7 @@ public class WeaponUIController : MonoBehaviour
     // Show weapon options for the selected model
     public void ShowWeaponOptions(ModelController model)
     {
-        ClearWeaponButtons(); // Clear previous buttons
+        ClearWeaponButtons(); // Clear all existing buttons
         foreach (WeaponController weapon in model.GetComponentsInChildren<WeaponController>())
         {
             if (weapon.range > 0) // Skip weapons with 0 range
@@ -41,12 +41,18 @@ public class WeaponUIController : MonoBehaviour
     // Create a button for each weapon
     private void CreateWeaponButton(WeaponController weapon, ModelController model)
     {
+        if (weaponButtonPrefab == null)
+        {
+            Debug.LogError("Weapon Button Prefab is not assigned!");
+            return;
+        }
+
         GameObject buttonObject = Instantiate(weaponButtonPrefab, weaponButtonContainer);
         Button button = buttonObject.GetComponent<Button>();
         TextMeshProUGUI buttonText = buttonObject.GetComponentInChildren<TextMeshProUGUI>();
         buttonText.text = weapon.weaponName;
 
-        // **NEW: Disable the button if the weapon has been used**
+        // Disable the button if the weapon has been used
         bool isUsed = ShootingController.Instance.IsWeaponUsed(weapon);
         button.interactable = !isUsed;
 
@@ -54,12 +60,12 @@ public class WeaponUIController : MonoBehaviour
         weaponButtons.Add(button);
     }
 
-    // Clear existing weapon buttons
+    // Clear all existing weapon buttons
     private void ClearWeaponButtons()
     {
-        foreach (Button button in weaponButtons)
+        foreach (Transform child in weaponButtonContainer)
         {
-            Destroy(button.gameObject);
+            Destroy(child.gameObject);
         }
         weaponButtons.Clear();
     }
