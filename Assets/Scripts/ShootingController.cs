@@ -1,3 +1,4 @@
+// ShootingController.cs
 using UnityEngine;
 using System.Collections.Generic; // Required for HashSet<>
 
@@ -88,6 +89,13 @@ public class ShootingController : MonoBehaviour
         if (selectedWeapon == null || selectedModel == null)
         {
             Debug.LogError("Weapon or model not selected for shooting.");
+            return;
+        }
+
+        // Prevent shooting if the model has marched
+        if (selectedModel.HasMarched())
+        {
+            GameController.Instance.ShowPlayerErrorMessage("Cannot shoot with a model that has marched.");
             return;
         }
 

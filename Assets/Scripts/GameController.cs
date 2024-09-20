@@ -1,3 +1,4 @@
+// GameController.cs
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
@@ -23,6 +24,10 @@ public class GameController : MonoBehaviour
     public TextMeshProUGUI phaseText;  
     public TextMeshProUGUI playerText;  
     public TextMeshProUGUI playerErrorText; // Reference to the Player Error Text UI
+
+    [Header("Movement Indicators")]
+    public GameObject movementRangeIndicatorPrefab;
+    public GameObject marchRangeIndicatorPrefab;
 
     [Header("Buttons and Panels")]
     public Button endTurnButton; // Reference to the End Turn button
@@ -153,36 +158,45 @@ public class GameController : MonoBehaviour
             return;
         }
 
-        // Calculate distance between current position and target position on the XZ plane
-        float distance = Vector3.Distance(new Vector3(selectedModel.transform.position.x, 0, selectedModel.transform.position.z), 
-                                          new Vector3(targetPosition.x, 0, targetPosition.z));
+        // Calculate new distance from start position after the move
+        Vector3 startPosXZ = new Vector3(selectedModel.GetStartPosition().x, 0, selectedModel.GetStartPosition().z);
+        Vector3 targetPosXZ = new Vector3(targetPosition.x, 0, targetPosition.z);
+        float newDistance = Vector3.Distance(startPosXZ, targetPosXZ);
 
-        // Calculate distance from start position to current position and to the target position
-        float distanceToStart = Vector3.Distance(new Vector3(selectedModel.transform.position.x, 0, selectedModel.transform.position.z), 
-                                                 new Vector3(selectedModel.GetStartPosition().x, 0, selectedModel.GetStartPosition().z));
-        float newDistanceToStart = Vector3.Distance(new Vector3(targetPosition.x, 0, targetPosition.z), 
-                                                    new Vector3(selectedModel.GetStartPosition().x, 0, selectedModel.GetStartPosition().z));
+        Debug.Log($"Attempting to move to new position. New Distance from Start: {newDistance}");
 
-        // Calculate potential remaining movement based on moving closer to the start position
-        float potentialRemainingMovement = selectedModel.GetRemainingMovement();
+        // Check if the new distance is within movement or march range
+        float movementRangeConverted = selectedModel.movementRange * GameConstants.MOVEMENT_CONVERSION_FACTOR;
+        float marchRangeConverted = (selectedModel.movementRange + selectedModel.initiative) * GameConstants.MOVEMENT_CONVERSION_FACTOR;
 
-        if (newDistanceToStart < distanceToStart)
+        if (newDistance <= movementRangeConverted)
         {
-            float distanceDiff = distanceToStart - newDistanceToStart;
-            potentialRemainingMovement = Mathf.Min(potentialRemainingMovement + distanceDiff, selectedModel.movementRange * GameConstants.MOVEMENT_CONVERSION_FACTOR);
+            // Within movement range
+            Debug.Log("Move is within movement range.");
+            selectedModel.UpdateMovement(newDistance);
+            selectedModel.MoveTo(targetPosition, newDistance);
+            HidePlayerErrorMessage();
+            EnableEndTurnButton();
         }
-
-        if (distance <= potentialRemainingMovement) // Check against potential remaining movement
+        else if (newDistance <= marchRangeConverted)
         {
-            selectedModel.MoveTo(targetPosition); // Move the selected model
-            HidePlayerErrorMessage(); // Hide any previous error message
-            EnableEndTurnButton(); // Re-enable the end turn button after a valid move
+            // Within march range
+            Debug.Log("Move is within march range.");
+            selectedModel.UpdateMovement(newDistance);
+            selectedModel.MoveTo(targetPosition, newDistance);
+            HidePlayerErrorMessage();
+            EnableEndTurnButton();
         }
         else
         {
-            ShowPlayerErrorMessage("Invalid move! Please select a valid location within the movement range."); // Display an error message
-            DisableEndTurnButton(); // Disable the end turn button if an invalid move is made
+            // Outside both ranges
+            Debug.Log("Move is outside both movement and march ranges.");
+            ShowPlayerErrorMessage("Invalid move! Please select a valid location within the movement or march range.");
+            DisableEndTurnButton();
         }
+
+        // Log remaining movement and march
+        Debug.Log($"After Move - Remaining Movement: {selectedModel.GetRemainingMovement()}, Remaining March: {selectedModel.GetRemainingMarchMovement()}");
     }
 
     /// <summary>
@@ -210,16 +224,28 @@ public class GameController : MonoBehaviour
         selectedModel = model;
         selectedModel.SelectModel();
 
-        if (currentPhase == Phase.FirstFire || currentPhase == Phase.AdvanceFire)
+        if (currentPhase == Phase.FirstFire)
         {
-            if (currentPhase == Phase.FirstFire && model.HasMoved())
+            if (model.HasMoved() || model.HasMarched())
             {
-                ShowPlayerErrorMessage("Cannot shoot with a model that moved in the Movement phase!");
+                ShowPlayerErrorMessage("Cannot shoot with a model that moved or marched in the Movement phase!");
                 DeselectAllModels();
             }
             else
             {
                 ShowWeaponsUI(model); // Show weapons UI when selecting a model for shooting
+            }
+        }
+        else if (currentPhase == Phase.AdvanceFire)
+        {
+            if (model.HasMarched())
+            {
+                ShowPlayerErrorMessage("Cannot shoot with a model that has marched in the Movement phase!");
+                DeselectAllModels();
+            }
+            else
+            {
+                ShowWeaponsUI(model); // Allow shooting if hasn't marched, regardless of movement
             }
         }
     }
@@ -411,6 +437,7 @@ public class GameController : MonoBehaviour
             if (model != null)
             {
                 model.ResetMovement(); // Reset movement and hasMoved
+                model.ResetMarch(); // Reset hasMarched
                 model.UpdateStartPosition(); // Update start position to current position
             }
         }
@@ -429,6 +456,7 @@ public class GameController : MonoBehaviour
             if (model != null)
             {
                 model.ResetMovement(); // Reset movement and hasMoved
+                model.ResetMarch(); // Reset hasMarched
                 model.UpdateStartPosition(); // Update start position to current position
             }
         }
