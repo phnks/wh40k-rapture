@@ -15,7 +15,7 @@ public class ModelController : MonoBehaviour
     [Header("Model Attributes")]
     public int playerID; // ID of the player who owns this model (1 or 2)
     public float movementRange = 6f; // Maximum distance the model can move in a turn
-    public int initiative = 3; // New Initiative attribute (1 to 10)
+    public int initiative = 3; // Initiative attribute (1 to 10)
     public Faction faction; // Faction of the model
 
     [Header("Shooting Attributes")]
@@ -25,26 +25,29 @@ public class ModelController : MonoBehaviour
     public int invulnerabilitySave; // Invulnerability save value
     public int wounds; // Current wounds of the model
 
-    private float initialMovement; // Store the initial movement value
-    private float initialMarchMovement; // Store the initial march movement value
+    private float initialMovement; // Initial movement value
+    private float initialMarchMovement; // Initial march movement value
     private float remainingMovement; // Remaining movement allowed in the current phase
     private float remainingMarchMovement; // Remaining march movement allowed
-    private Vector3 startPosition; // The original position at the start of the phase
+    private Vector3 startPosition; // Original position at the start of the phase
 
     private bool isSelected = false;
-    private bool hasMoved = false; // Track if this model has moved during the Movement phase
-    private bool hasMarched = false; // Track if this model has marched during the Movement phase
+    private bool hasMoved = false; // Tracks if the model has moved during the Movement phase
+    private bool hasMarched = false; // Tracks if the model has marched during the Movement phase
+    private bool hasCharged = false; // Tracks if the model has charged this round
 
     private NavMeshAgent agent; // Reference to the NavMeshAgent component
     private Outline outline; // Reference to the Outline component
-    private GameObject rangeIndicator; // Reference to the movement range visual indicator
-    private GameObject marchRangeIndicator; // Reference to the march range visual indicator
-    private GameObject moveIndicator; // Visual indicator for the original position after the first move
+    private GameObject rangeIndicator; // Movement range indicator
+    private GameObject marchRangeIndicator; // March range indicator
+    private GameObject chargeRangeIndicator; // Charge range indicator
+    private GameObject moveIndicator; // Indicator for original position after the first move
 
-    private List<WeaponController> weapons = new List<WeaponController>(); // Weapons the model has
+    private List<WeaponController> weapons = new List<WeaponController>(); // Weapons the model possesses
 
-    private const float MOVE_SPEED = 10000f; // Movement speed is a constant for all objects
-    private const float ROTATION_SPEED = 6400f; // Rotation speed (updated for faster rotation)
+    public const float ROTATION_SPEED = 6400f; // Rotation speed constant
+
+    private const float MOVE_SPEED = 10000f; // Movement speed constant
 
     void Start()
     {
@@ -57,7 +60,7 @@ public class ModelController : MonoBehaviour
         initialMarchMovement = (movementRange + initiative) * GameConstants.MOVEMENT_CONVERSION_FACTOR; // Store initial march movement
         remainingMarchMovement = initialMarchMovement; // Initialize remaining march movement
 
-        startPosition = transform.position; // Store the starting position at the start of the phase
+        startPosition = transform.position; // Store starting position at the start of the phase
 
         UpdateColors(); // Set initial colors based on faction
         InitializeMovementIndicators();
@@ -69,7 +72,7 @@ public class ModelController : MonoBehaviour
     void InitializeMovementIndicators()
     {
         // Create movement range indicator
-        rangeIndicator = Instantiate(GameController.Instance.movementRangeIndicatorPrefab, transform.position + Vector3.up * 58f, Quaternion.identity);
+        rangeIndicator = Instantiate(GameController.Instance.movementRangeIndicatorPrefab, transform.position + Vector3.up * 60f, Quaternion.identity);
         rangeIndicator.transform.localScale = new Vector3(remainingMovement * 2, 0.01f, remainingMovement * 2);
         Renderer rangeRenderer = rangeIndicator.GetComponent<Renderer>();
         Color factionColor = GetFactionColor();
@@ -77,12 +80,19 @@ public class ModelController : MonoBehaviour
         rangeIndicator.SetActive(false); // Hide initially
 
         // Create march range indicator
-        marchRangeIndicator = Instantiate(GameController.Instance.marchRangeIndicatorPrefab, transform.position + Vector3.up * 58f, Quaternion.identity);
+        marchRangeIndicator = Instantiate(GameController.Instance.marchRangeIndicatorPrefab, transform.position + Vector3.up * 60f, Quaternion.identity);
         marchRangeIndicator.transform.localScale = new Vector3(remainingMarchMovement * 2, 0.01f, remainingMarchMovement * 2);
         Renderer marchRenderer = marchRangeIndicator.GetComponent<Renderer>();
         Color darkerColor = factionColor * 0.7f;
         marchRenderer.material.color = new Color(darkerColor.r, darkerColor.g, darkerColor.b, 0.3f);
         marchRangeIndicator.SetActive(false); // Hide initially
+
+        // Create charge range indicator
+        chargeRangeIndicator = Instantiate(GameController.Instance.chargeRangeIndicatorPrefab, transform.position + Vector3.up * 60f, Quaternion.identity);
+        chargeRangeIndicator.transform.localScale = new Vector3(0, 0.01f, 0); // Initially hidden
+        Renderer chargeRenderer = chargeRangeIndicator.GetComponent<Renderer>();
+        chargeRenderer.material.color = new Color(factionColor.r, factionColor.g, factionColor.b, 0.3f);
+        chargeRangeIndicator.SetActive(false); // Hide initially
 
         Debug.Log($"Movement Indicators initialized for {gameObject.name}");
     }
@@ -113,7 +123,7 @@ public class ModelController : MonoBehaviour
 
     /// <summary>
     /// Deselects the model, disabling the outline and hiding the movement range.
-    /// Also deletes the move indicator.
+    /// Also deletes the move and charge indicators.
     /// </summary>
     public void DeselectModel()
     {
@@ -121,31 +131,47 @@ public class ModelController : MonoBehaviour
         outline.enabled = false; // Disable outline when deselected
         HideMovementRange(); // Hide the movement range when the model is deselected
         DeleteMoveIndicator(); // Delete move indicator when deselected
+        DeleteChargeIndicator(); // Delete charge indicator when deselected
         Debug.Log("Model deselected: " + gameObject.name);
     }
 
     /// <summary>
-    /// Displays the movement and march range indicators based on the current remaining movement.
+    /// Displays the movement, march, and charge range indicators based on the current phase.
     /// </summary>
-    private void ShowMovementRange()
+    public void ShowMovementRange()
     {
-        if (GameController.Instance.GetCurrentPhase() != GameController.Phase.Movement)
+        GameController.Phase currentPhase = GameController.Instance.GetCurrentPhase();
+        if (currentPhase == GameController.Phase.Movement)
         {
-            return;
-        }
+            if (rangeIndicator != null)
+            {
+                rangeIndicator.SetActive(true);
+                rangeIndicator.transform.position = new Vector3(transform.position.x, 60f, transform.position.z);
+                rangeIndicator.transform.localScale = new Vector3(remainingMovement * 2, 0.01f, remainingMovement * 2);
+                Debug.Log($"Movement range indicator shown for {gameObject.name}.");
+            }
 
-        if (rangeIndicator != null)
-        {
-            rangeIndicator.SetActive(true);
-            rangeIndicator.transform.position = new Vector3(transform.position.x, 58.0f, transform.position.z);
-            rangeIndicator.transform.localScale = new Vector3(remainingMovement * 2, 0.01f, remainingMovement * 2);
+            if (marchRangeIndicator != null)
+            {
+                marchRangeIndicator.SetActive(true);
+                marchRangeIndicator.transform.position = new Vector3(transform.position.x, 60f, transform.position.z);
+                marchRangeIndicator.transform.localScale = new Vector3(remainingMarchMovement * 2, 0.01f, remainingMarchMovement * 2);
+                Debug.Log($"March range indicator shown for {gameObject.name}.");
+            }
         }
-
-        if (marchRangeIndicator != null)
+        else if (currentPhase == GameController.Phase.Charge)
         {
-            marchRangeIndicator.SetActive(true);
-            marchRangeIndicator.transform.position = new Vector3(transform.position.x, 58.0f, transform.position.z);
-            marchRangeIndicator.transform.localScale = new Vector3(remainingMarchMovement * 2, 0.01f, remainingMarchMovement * 2);
+            if (!hasMarched && !hasCharged)
+            {
+                if (chargeRangeIndicator != null)
+                {
+                    float maxChargeRange = (movementRange + 6) * GameConstants.MOVEMENT_CONVERSION_FACTOR;
+                    chargeRangeIndicator.SetActive(true);
+                    chargeRangeIndicator.transform.position = new Vector3(transform.position.x, 60f, transform.position.z);
+                    chargeRangeIndicator.transform.localScale = new Vector3(maxChargeRange * 2, 0.01f, maxChargeRange * 2);
+                    Debug.Log($"Charge range indicator shown for {gameObject.name}.");
+                }
+            }
         }
 
         UpdateColors(); // Ensure the color matches the faction when shown
@@ -153,19 +179,25 @@ public class ModelController : MonoBehaviour
     }
 
     /// <summary>
-    /// Hides the movement and march range indicators.
+    /// Hides the movement, march, and charge range indicators.
     /// </summary>
     private void HideMovementRange()
     {
         if (rangeIndicator != null)
         {
             rangeIndicator.SetActive(false); // Deactivate the range indicator
+            Debug.Log($"Movement range indicator hidden for {gameObject.name}.");
         }
         if (marchRangeIndicator != null)
         {
             marchRangeIndicator.SetActive(false); // Deactivate the march range indicator
+            Debug.Log($"March range indicator hidden for {gameObject.name}.");
         }
-        Debug.Log($"Movement range hidden for {gameObject.name}");
+        if (chargeRangeIndicator != null)
+        {
+            chargeRangeIndicator.SetActive(false); // Deactivate the charge range indicator
+            Debug.Log($"Charge range indicator hidden for {gameObject.name}.");
+        }
     }
 
     /// <summary>
@@ -211,6 +243,8 @@ public class ModelController : MonoBehaviour
         // Ensure Y remains constant
         targetPosition.y = transform.position.y;
 
+        Debug.Log($"Initiating MoveTo coroutine for {gameObject.name} to {targetPosition}.");
+
         StartCoroutine(MoveToPosition(targetPosition)); // Move the model with a coroutine
 
         if (moveIndicator == null)
@@ -229,12 +263,15 @@ public class ModelController : MonoBehaviour
     /// <returns>IEnumerator for the coroutine.</returns>
     private System.Collections.IEnumerator MoveToPosition(Vector3 targetPosition)
     {
+        Debug.Log($"Starting MoveToPosition coroutine for {gameObject.name}.");
+
         while (Vector3.Distance(transform.position, targetPosition) > 0.1f)
         {
             // Move towards the target position while keeping Y constant
             Vector3 newPosition = Vector3.MoveTowards(transform.position, targetPosition, MOVE_SPEED * Time.deltaTime);
             newPosition.y = transform.position.y; // Keep Y unchanged
             transform.position = newPosition;
+            Debug.Log($"Model {gameObject.name} moving towards {targetPosition}. Current Position: {transform.position}");
             yield return null; // Wait for the next frame
         }
         transform.position = targetPosition; // Snap to the exact position at the end
@@ -285,14 +322,16 @@ public class ModelController : MonoBehaviour
     {
         if (rangeIndicator != null)
         {
-            rangeIndicator.transform.position = new Vector3(transform.position.x, 58.0f, transform.position.z);
+            rangeIndicator.transform.position = new Vector3(transform.position.x, 60f, transform.position.z);
             rangeIndicator.transform.localScale = new Vector3(remainingMovement * 2, 0.01f, remainingMovement * 2);
+            Debug.Log($"Updated Movement Range Indicator for {gameObject.name}.");
         }
 
         if (marchRangeIndicator != null)
         {
-            marchRangeIndicator.transform.position = new Vector3(transform.position.x, 58.0f, transform.position.z);
+            marchRangeIndicator.transform.position = new Vector3(transform.position.x, 60f, transform.position.z);
             marchRangeIndicator.transform.localScale = new Vector3(remainingMarchMovement * 2, 0.01f, remainingMarchMovement * 2);
+            Debug.Log($"Updated March Range Indicator for {gameObject.name}.");
         }
 
         Debug.Log($"Updated Indicators - Remaining Movement: {remainingMovement}, Remaining March: {remainingMarchMovement}");
@@ -320,6 +359,12 @@ public class ModelController : MonoBehaviour
             marchRenderer.material.color = new Color(darkerColor.r, darkerColor.g, darkerColor.b, 0.3f);
         }
 
+        if (chargeRangeIndicator != null)
+        {
+            Renderer chargeRenderer = chargeRangeIndicator.GetComponent<Renderer>();
+            chargeRenderer.material.color = new Color(factionColor.r, factionColor.g, factionColor.b, 0.3f);
+        }
+
         if (moveIndicator != null)
         {
             Renderer[] moveIndicatorRenderers = moveIndicator.GetComponentsInChildren<Renderer>();
@@ -332,7 +377,10 @@ public class ModelController : MonoBehaviour
         Debug.Log($"Colors updated for {gameObject.name}");
     }
 
-    private Color GetFactionColor()
+    /// <summary>
+    /// Gets the faction color.
+    /// </summary>
+    public Color GetFactionColor()
     {
         return faction == Faction.AdeptusMechanicus ? Color.red : Color.green;
     }
@@ -343,8 +391,9 @@ public class ModelController : MonoBehaviour
     /// <param name="rotationAmount">The amount to rotate the model.</param>
     public void RotateModel(float rotationAmount)
     {
-        transform.Rotate(Vector3.up, rotationAmount * ROTATION_SPEED * Time.deltaTime);
-        Debug.Log($"Model {gameObject.name} rotated by {rotationAmount * ROTATION_SPEED * Time.deltaTime} degrees.");
+        float rotationDegrees = rotationAmount * ROTATION_SPEED * Time.deltaTime;
+        transform.Rotate(Vector3.up, rotationDegrees);
+        Debug.Log($"Model {gameObject.name} rotated by {rotationDegrees} degrees.");
     }
 
     /// <summary>
@@ -388,6 +437,19 @@ public class ModelController : MonoBehaviour
     }
 
     /// <summary>
+    /// Deletes the charge indicator associated with the model.
+    /// </summary>
+    public void DeleteChargeIndicator()
+    {
+        if (chargeRangeIndicator != null)
+        {
+            Destroy(chargeRangeIndicator); // Delete the charge indicator when deselected
+            chargeRangeIndicator = null;
+            Debug.Log($"Charge range indicator deleted for {gameObject.name}");
+        }
+    }
+
+    /// <summary>
     /// Adds a weapon to the model's weapon list.
     /// </summary>
     /// <param name="weapon">The WeaponController to add.</param>
@@ -413,6 +475,15 @@ public class ModelController : MonoBehaviour
     public bool HasMarched()
     {
         return hasMarched;
+    }
+
+    /// <summary>
+    /// Checks if the model has charged this round.
+    /// </summary>
+    /// <returns>True if the model has charged; otherwise, false.</returns>
+    public bool HasCharged()
+    {
+        return hasCharged;
     }
 
     /// <summary>
@@ -452,6 +523,31 @@ public class ModelController : MonoBehaviour
     }
 
     /// <summary>
+    /// Resets the model's charge status for a new round.
+    /// </summary>
+    public void ResetCharge()
+    {
+        bool previousHasCharged = hasCharged;
+        hasCharged = false; // Reset hasCharged flag
+
+        if (hasCharged != previousHasCharged)
+        {
+            Debug.Log($"hasCharged changed to: {hasCharged} for {gameObject.name}");
+        }
+
+        Debug.Log($"Reset Charge - hasCharged: {hasCharged}");
+    }
+
+    /// <summary>
+    /// Sets the model as having charged.
+    /// </summary>
+    public void SetCharged()
+    {
+        hasCharged = true;
+        Debug.Log($"Model {gameObject.name} has charged.");
+    }
+
+    /// <summary>
     /// Updates the model's starting position to its current position.
     /// </summary>
     public void UpdateStartPosition()
@@ -461,12 +557,17 @@ public class ModelController : MonoBehaviour
         // Update the movement range indicator's position if it's active
         if (rangeIndicator != null && rangeIndicator.activeSelf)
         {
-            rangeIndicator.transform.position = new Vector3(transform.position.x, 58.0f, transform.position.z);
+            rangeIndicator.transform.position = new Vector3(transform.position.x, 60f, transform.position.z);
         }
 
         if (marchRangeIndicator != null && marchRangeIndicator.activeSelf)
         {
-            marchRangeIndicator.transform.position = new Vector3(transform.position.x, 58.0f, transform.position.z);
+            marchRangeIndicator.transform.position = new Vector3(transform.position.x, 60f, transform.position.z);
+        }
+
+        if (chargeRangeIndicator != null && chargeRangeIndicator.activeSelf)
+        {
+            chargeRangeIndicator.transform.position = new Vector3(transform.position.x, 60f, transform.position.z);
         }
 
         Debug.Log($"Updated Start Position to: {startPosition}");
@@ -495,6 +596,27 @@ public class ModelController : MonoBehaviour
             Debug.Log($"Model {gameObject.name} is destroyed!");
             Destroy(gameObject); // Remove model from the game
         }
+    }
+
+    /// <summary>
+    /// Checks if this model is colliding with another model.
+    /// </summary>
+    /// <param name="otherModel">The other model to check collision with.</param>
+    /// <returns>True if colliding; otherwise, false.</returns>
+    public bool IsColliding(ModelController otherModel)
+    {
+        Collider colliderA = this.GetComponent<Collider>();
+        Collider colliderB = otherModel.GetComponent<Collider>();
+
+        if (colliderA == null || colliderB == null)
+        {
+            Debug.LogError("One or both models do not have colliders.");
+            return false;
+        }
+
+        bool isIntersecting = colliderA.bounds.Intersects(colliderB.bounds);
+        Debug.Log($"IsColliding between {this.gameObject.name} and {otherModel.gameObject.name}: {isIntersecting}");
+        return isIntersecting;
     }
 }
 

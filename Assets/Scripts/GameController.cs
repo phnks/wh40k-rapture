@@ -28,11 +28,15 @@ public class GameController : MonoBehaviour
     [Header("Movement Indicators")]
     public GameObject movementRangeIndicatorPrefab;
     public GameObject marchRangeIndicatorPrefab;
+    public GameObject chargeRangeIndicatorPrefab; // Ensure this is assigned
 
     [Header("Buttons and Panels")]
     public Button endTurnButton; // Reference to the End Turn button
     public GameObject weaponUIPanel; // Reference to the UI panel displaying weapons
     public WeaponUIController weaponUIController; // Reference to the Weapon UI controller
+
+    [Header("Controllers")]
+    public ChargeController chargeController; // Reference to the ChargeController
 
     private int currentRound = 1;       
     private Phase currentPhase;         
@@ -48,22 +52,47 @@ public class GameController : MonoBehaviour
 
     private const float RAYCAST_RANGE = 2000f; // Increased raycast range for selection
 
+    /// <summary>
+    /// Public getter for selectedModel
+    /// </summary>
+    public ModelController SelectedModel
+    {
+        get { return selectedModel; }
+    }
+
     void Awake()
     {
         // Set up the singleton instance
         if (Instance == null)
         {
             Instance = this;
+            Debug.Log("GameController singleton instance initialized.");
         }
         else
         {
             Destroy(gameObject);
+            Debug.LogWarning("Duplicate GameController instance destroyed.");
+        }
+
+        // Ensure ChargeController is assigned
+        if (chargeController == null)
+        {
+            chargeController = GetComponent<ChargeController>();
+            if (chargeController == null)
+            {
+                Debug.LogError("ChargeController component is missing on GameController!");
+            }
+            else
+            {
+                Debug.Log("ChargeController successfully linked in GameController.");
+            }
         }
     }
 
     void Start()
     {
         currentPhase = Phase.Movement; 
+        Debug.Log($"Starting game at Round {currentRound}, Phase {currentPhase}.");
         UpdateUI();
         InitializePlayerModels(); // Initialize and track player models
         EnableEndTurnButton(); // Always enable End Turn button initially
@@ -75,11 +104,16 @@ public class GameController : MonoBehaviour
         {
             Debug.LogError("ShootingController component is missing on GameController!");
         }
+        else
+        {
+            Debug.Log("ShootingController successfully linked in GameController.");
+        }
 
         // Initialize the WeaponUIController
         if (weaponUIController != null)
         {
             weaponUIController.Initialize(); // Initialize the Weapon UI Controller
+            Debug.Log("WeaponUIController initialized.");
         }
         else
         {
@@ -100,6 +134,7 @@ public class GameController : MonoBehaviour
     public void EnableEndTurnButton()
     {
         endTurnButton.interactable = true; // Enable the button
+        Debug.Log("End Turn button enabled.");
     }
 
     /// <summary>
@@ -108,6 +143,7 @@ public class GameController : MonoBehaviour
     public void DisableEndTurnButton()
     {
         endTurnButton.interactable = false; // Disable the button
+        Debug.Log("End Turn button disabled.");
     }
 
     /// <summary>
@@ -128,9 +164,20 @@ public class GameController : MonoBehaviour
                 ModelController model = hit.transform.GetComponent<ModelController>();
                 if (model != null && model.playerID == currentPlayer) // Check if it's a valid model and belongs to the current player
                 {
+                    // Prevent selecting models that cannot charge during Charge phase
+                    if (currentPhase == Phase.Charge)
+                    {
+                        if (model.HasMarched() || model.HasCharged())
+                        {
+                            ShowPlayerErrorMessage("This model cannot charge!");
+                            Debug.Log("Attempted to select a model that cannot charge.");
+                            return; // Do not select the model
+                        }
+                    }
+
                     SelectModel(model); // Select the model
                 }
-                else if (selectedModel != null && currentPhase == Phase.Movement && hit.collider.CompareTag("Ground")) // Move if ground is clicked and a model is selected, only in movement phase
+                else if (selectedModel != null && (currentPhase == Phase.Movement || currentPhase == Phase.Charge) && hit.collider.CompareTag("Ground")) // Move if ground is clicked and a model is selected, in movement or charge phase
                 {
                     HandleMovement(hit.point); // Pass the hit point to handle movement
                 }
@@ -140,6 +187,15 @@ public class GameController : MonoBehaviour
                     if (targetModel != null && targetModel.playerID != currentPlayer) // Target model must belong to the opposing player
                     {
                         shootingController.HandleShooting(targetModel); // Handle shooting logic
+                    }
+                }
+                else if (selectedModel != null && currentPhase == Phase.Charge) // Handle charging target selection in Charge phase
+                {
+                    ModelController targetModel = hit.transform.GetComponent<ModelController>();
+                    if (targetModel != null && targetModel.playerID != currentPlayer)
+                    {
+                        chargeController.SelectChargeTarget(targetModel); // Delegate to ChargeController
+                        Debug.Log($"Charge initiated from {selectedModel.gameObject.name} to {targetModel.gameObject.name}.");
                     }
                 }
             }
@@ -165,38 +221,100 @@ public class GameController : MonoBehaviour
 
         Debug.Log($"Attempting to move to new position. New Distance from Start: {newDistance}");
 
-        // Check if the new distance is within movement or march range
         float movementRangeConverted = selectedModel.movementRange * GameConstants.MOVEMENT_CONVERSION_FACTOR;
         float marchRangeConverted = (selectedModel.movementRange + selectedModel.initiative) * GameConstants.MOVEMENT_CONVERSION_FACTOR;
 
-        if (newDistance <= movementRangeConverted)
+        if (currentPhase == Phase.Charge)
         {
-            // Within movement range
-            Debug.Log("Move is within movement range.");
-            selectedModel.UpdateMovement(newDistance);
-            selectedModel.MoveTo(targetPosition, newDistance);
-            HidePlayerErrorMessage();
-            EnableEndTurnButton();
-        }
-        else if (newDistance <= marchRangeConverted)
-        {
-            // Within march range
-            Debug.Log("Move is within march range.");
-            selectedModel.UpdateMovement(newDistance);
-            selectedModel.MoveTo(targetPosition, newDistance);
-            HidePlayerErrorMessage();
-            EnableEndTurnButton();
+            // During Charge phase, allow movement up to chargeDistance
+            float chargeDistance = chargeController.ChargeDistance;
+            Debug.Log($"Charge Distance: {chargeDistance}");
+
+            if (newDistance <= chargeDistance)
+            {
+                Debug.Log("Move is within charge distance.");
+                selectedModel.UpdateMovement(newDistance);
+                selectedModel.MoveTo(targetPosition, newDistance);
+                HidePlayerErrorMessage();
+
+                // After moving, check for collision with the target
+                StartCoroutine(CheckChargeCollision());
+            }
+            else
+            {
+                Debug.Log("Move is outside charge distance.");
+                ShowPlayerErrorMessage("Invalid move! Please move within the charge distance.");
+                DisableEndTurnButton();
+            }
         }
         else
         {
-            // Outside both ranges
-            Debug.Log("Move is outside both movement and march ranges.");
-            ShowPlayerErrorMessage("Invalid move! Please select a valid location within the movement or march range.");
-            DisableEndTurnButton();
+            // Regular Movement and March phases
+            if (newDistance <= movementRangeConverted)
+            {
+                // Within movement range
+                Debug.Log("Move is within movement range.");
+                selectedModel.UpdateMovement(newDistance);
+                selectedModel.MoveTo(targetPosition, newDistance);
+                HidePlayerErrorMessage();
+                EnableEndTurnButton();
+            }
+            else if (newDistance <= marchRangeConverted)
+            {
+                // Within march range
+                Debug.Log("Move is within march range.");
+                selectedModel.UpdateMovement(newDistance);
+                selectedModel.MoveTo(targetPosition, newDistance);
+                HidePlayerErrorMessage();
+                EnableEndTurnButton();
+            }
+            else
+            {
+                // Outside both ranges
+                Debug.Log("Move is outside both movement and march ranges.");
+                ShowPlayerErrorMessage("Invalid move! Please select a valid location within the movement or march range.");
+                DisableEndTurnButton();
+            }
         }
 
         // Log remaining movement and march
         Debug.Log($"After Move - Remaining Movement: {selectedModel.GetRemainingMovement()}, Remaining March: {selectedModel.GetRemainingMarchMovement()}");
+    }
+
+    /// <summary>
+    /// Coroutine to check collision after moving during Charge phase.
+    /// </summary>
+    /// <returns></returns>
+    private IEnumerator CheckChargeCollision()
+    {
+        yield return new WaitForEndOfFrame(); // Wait for movement to complete
+
+        if (currentPhase != Phase.Charge || selectedModel == null)
+            yield break;
+
+        ModelController targetModel = chargeController.ChargeTarget;
+
+        if (targetModel == null)
+        {
+            Debug.LogError("ChargeTarget is null during collision check.");
+            yield break;
+        }
+
+        bool isColliding = selectedModel.IsColliding(targetModel);
+        Debug.Log($"Collision Check: {isColliding}");
+
+        if (isColliding)
+        {
+            Debug.Log("Charge collision successful.");
+            ShowPlayerErrorMessage("Charge successful! End your turn.");
+            EnableEndTurnButton();
+        }
+        else
+        {
+            Debug.Log("Charge collision failed.");
+            ShowPlayerErrorMessage("Charge did not collide with the target. Please attempt to collide.");
+            DisableEndTurnButton();
+        }
     }
 
     /// <summary>
@@ -207,6 +325,7 @@ public class GameController : MonoBehaviour
         if (Input.GetKeyDown(KeyCode.Escape) && selectedModel != null) // Deselect with Escape key
         {
             DeselectAllModels();
+            Debug.Log("Model deselected via Escape key.");
         }
     }
 
@@ -223,12 +342,14 @@ public class GameController : MonoBehaviour
 
         selectedModel = model;
         selectedModel.SelectModel();
+        Debug.Log($"Model {model.gameObject.name} has been selected.");
 
         if (currentPhase == Phase.FirstFire)
         {
             if (model.HasMoved() || model.HasMarched())
             {
                 ShowPlayerErrorMessage("Cannot shoot with a model that moved or marched in the Movement phase!");
+                Debug.Log("Cannot shoot with a model that moved or marched.");
                 DeselectAllModels();
             }
             else
@@ -241,12 +362,18 @@ public class GameController : MonoBehaviour
             if (model.HasMarched())
             {
                 ShowPlayerErrorMessage("Cannot shoot with a model that has marched in the Movement phase!");
+                Debug.Log("Cannot shoot with a model that has marched.");
                 DeselectAllModels();
             }
             else
             {
                 ShowWeaponsUI(model); // Allow shooting if hasn't marched, regardless of movement
             }
+        }
+        else if (currentPhase == Phase.Charge)
+        {
+            // No additional action on selection during Charge phase
+            Debug.Log("Model selected during Charge phase.");
         }
     }
 
@@ -257,6 +384,7 @@ public class GameController : MonoBehaviour
     {
         if (selectedModel != null)
         {
+            Debug.Log($"Deselecting model: {selectedModel.gameObject.name}");
             selectedModel.DeselectModel();
             selectedModel = null;
         }
@@ -275,6 +403,7 @@ public class GameController : MonoBehaviour
             if (Mathf.Abs(scroll) > 0.01f) // Check if the mouse wheel has been scrolled
             {
                 selectedModel.RotateModel(scroll); // Rotate the selected model based on scroll input
+                Debug.Log($"Rotated model {selectedModel.gameObject.name} by {scroll * ModelController.ROTATION_SPEED * Time.deltaTime} degrees.");
             }
         }
     }
@@ -297,6 +426,7 @@ public class GameController : MonoBehaviour
         }
         DeselectAllModels(); // Deselect models at the end of the turn
         UpdateUI();
+        Debug.Log($"Advanced to Player {currentPlayer}'s turn.");
     }
 
     /// <summary>
@@ -312,6 +442,42 @@ public class GameController : MonoBehaviour
         {
             currentPhase++;
             UpdateUI(); 
+
+            if (currentPhase == Phase.Charge)
+            {
+                Debug.Log("Entering Charge Phase.");
+                ResetStartPositionsForCharge(); // Reset starting positions at the start of Charge phase
+            }
+            else
+            {
+                Debug.Log($"Entering {currentPhase} Phase.");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Resets the starting positions of all models for the Charge phase.
+    /// </summary>
+    private void ResetStartPositionsForCharge()
+    {
+        foreach (GameObject modelObj in player1Models)
+        {
+            ModelController model = modelObj.GetComponent<ModelController>();
+            if (model != null)
+            {
+                model.UpdateStartPosition();
+                Debug.Log($"Start position reset for {model.gameObject.name}.");
+            }
+        }
+
+        foreach (GameObject modelObj in player2Models)
+        {
+            ModelController model = modelObj.GetComponent<ModelController>();
+            if (model != null)
+            {
+                model.UpdateStartPosition();
+                Debug.Log($"Start position reset for {model.gameObject.name}.");
+            }
         }
     }
 
@@ -323,10 +489,12 @@ public class GameController : MonoBehaviour
         currentRound++;
         currentPhase = Phase.Movement;
 
+        Debug.Log($"Ending Round {currentRound - 1}. Starting Round {currentRound}.");
+
         // Reset used weapons
         shootingController.ResetUsedWeapons();
 
-        // Reset each model's movement and states
+        // Reset each model's movement, march, and charge status
         ResetAllModels();
 
         UpdateUI();
@@ -358,6 +526,7 @@ public class GameController : MonoBehaviour
         roundText.text = "Round: " + currentRound;
         phaseText.text = "Phase: " + currentPhase.ToString();
         playerText.text = "Current Player: " + currentPlayer;
+        Debug.Log($"UI Updated - Round: {currentRound}, Phase: {currentPhase}, Player: {currentPlayer}");
     }
 
     /// <summary>
@@ -371,12 +540,15 @@ public class GameController : MonoBehaviour
             if (model.playerID == 1)
             {
                 player1Models.Add(model.gameObject);
+                Debug.Log($"Model {model.gameObject.name} added to Player 1's list.");
             }
             else if (model.playerID == 2)
             {
                 player2Models.Add(model.gameObject);
+                Debug.Log($"Model {model.gameObject.name} added to Player 2's list.");
             }
         }
+        Debug.Log("Player models initialized and categorized.");
     }
 
     /// <summary>
@@ -387,6 +559,7 @@ public class GameController : MonoBehaviour
     {
         playerErrorText.text = message;
         playerErrorText.gameObject.SetActive(true);
+        Debug.Log($"Player Error Message Displayed: {message}");
         StartCoroutine(HidePlayerErrorMessageAfterDelay(2f)); // Hide after 2 seconds
     }
 
@@ -407,6 +580,7 @@ public class GameController : MonoBehaviour
     public void HidePlayerErrorMessage()
     {
         playerErrorText.gameObject.SetActive(false);
+        Debug.Log("Player error message hidden.");
     }
 
     /// <summary>
@@ -416,10 +590,11 @@ public class GameController : MonoBehaviour
     void ShowWeaponsUI(ModelController model)
     {
         weaponUIController.ShowWeaponOptions(model);
+        Debug.Log($"Weapons UI displayed for model {model.gameObject.name}.");
     }
 
     /// <summary>
-    /// Resets all models' movement and states at the end of a round.
+    /// Resets all models' movement, march, and charge statuses at the end of a round.
     /// </summary>
     private void ResetAllModels()
     {
@@ -438,7 +613,9 @@ public class GameController : MonoBehaviour
             {
                 model.ResetMovement(); // Reset movement and hasMoved
                 model.ResetMarch(); // Reset hasMarched
+                model.ResetCharge(); // Reset hasCharged
                 model.UpdateStartPosition(); // Update start position to current position
+                Debug.Log($"Model {model.gameObject.name} reset for new round.");
             }
         }
 
@@ -457,8 +634,17 @@ public class GameController : MonoBehaviour
             {
                 model.ResetMovement(); // Reset movement and hasMoved
                 model.ResetMarch(); // Reset hasMarched
+                model.ResetCharge(); // Reset hasCharged
                 model.UpdateStartPosition(); // Update start position to current position
+                Debug.Log($"Model {model.gameObject.name} reset for new round.");
             }
+        }
+
+        // Reset ChargeController if needed
+        if (chargeController != null)
+        {
+            // Additional reset logic if necessary
+            Debug.Log("All models have been reset.");
         }
     }
 
@@ -471,10 +657,12 @@ public class GameController : MonoBehaviour
         if (model.playerID == 1)
         {
             player1Models.Remove(model.gameObject);
+            Debug.Log($"Model {model.gameObject.name} removed from Player 1's list.");
         }
         else if (model.playerID == 2)
         {
             player2Models.Remove(model.gameObject);
+            Debug.Log($"Model {model.gameObject.name} removed from Player 2's list.");
         }
     }
 }
