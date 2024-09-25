@@ -212,6 +212,14 @@ public class GameController : MonoBehaviour
                         // chargeState == None, prompt player to select a model
                         if (model != null && model.playerID == currentPlayer)
                         {
+                            // Check if the model is pinned
+                            if (currentPhaseLocal != Phase.Fight && IsModelPinned(model))
+                            {
+                                ShowPlayerErrorMessage("Cannot select a pinned model outside of Fight phase.");
+                                Debug.Log("Attempted to select a pinned model outside of Fight phase.");
+                                return; // Do not select the model
+                            }
+
                             // Prevent selecting models that cannot charge during Charge phase
                             if (model.HasMarched() || model.HasCharged())
                             {
@@ -236,6 +244,14 @@ public class GameController : MonoBehaviour
                     // Handle selections for other phases
                     if (model != null && model.playerID == currentPlayer)
                     {
+                        // Check if the model is pinned
+                        if (currentPhaseLocal != Phase.Fight && IsModelPinned(model))
+                        {
+                            ShowPlayerErrorMessage("Cannot select a pinned model outside of Fight phase.");
+                            Debug.Log("Attempted to select a pinned model outside of Fight phase.");
+                            return; // Do not select the model
+                        }
+
                         // Prevent selecting models that cannot perform actions
                         // Implement phase-specific selection logic here
                         SelectModel(model);
@@ -775,6 +791,29 @@ public class GameController : MonoBehaviour
                 player2Models.Remove(model.gameObject);
                 Debug.Log($"Model {model.gameObject.name} removed from Player 2's list.");
             }
+        }
+
+        /// <summary>
+        /// Checks if a model is pinned. A model is pinned if it is colliding with any enemy model.
+        /// </summary>
+        /// <param name="model">The model to check.</param>
+        /// <returns>True if the model is pinned; otherwise, false.</returns>
+        private bool IsModelPinned(ModelController model)
+        {
+            List<GameObject> enemyModels = (currentPlayer == 1) ? player2Models : player1Models;
+
+            foreach (GameObject enemyObj in enemyModels)
+            {
+                ModelController enemyModel = enemyObj.GetComponent<ModelController>();
+                if (enemyModel != null && model.IsColliding(enemyModel))
+                {
+                    Debug.Log($"Model {model.gameObject.name} is pinned by {enemyModel.gameObject.name}.");
+                    return true;
+                }
+            }
+
+            Debug.Log($"Model {model.gameObject.name} is not pinned.");
+            return false;
         }
 }
 
