@@ -278,8 +278,10 @@ public class ChargeController : MonoBehaviour
         else
         {
             Debug.Log("Charge collision failed.");
-            gameController.ShowPlayerErrorMessage("Charge did not collide with the target. Performing surge move.");
-            PerformSurgeMove(); // Automatically perform surge move
+            gameController.ShowPlayerErrorMessage("Move does not collide with the target. Please choose a different location.");
+            Debug.Log("Move does not collide with the charge target.");
+            // Do not perform surge move. Allow the player to attempt moving again.
+            // Keep chargeState as AwaitingMovement
         }
     }
 
