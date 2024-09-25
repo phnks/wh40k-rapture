@@ -7,7 +7,6 @@ using System.Collections;
 using System.Collections.Generic;
 
 public class GameController : MonoBehaviour
-
 {
     public enum Phase
     {
@@ -174,12 +173,25 @@ public class GameController : MonoBehaviour
                         // Handle movement clicks during Charge phase
                         if (hit.collider.CompareTag("Ground"))
                         {
+                            // Player clicked on the ground
+                            chargeController.SetDirectCharge(false); // Not a direct charge
                             HandleMovement(hit.point); // Pass the hit point to handle movement
                         }
                         else
                         {
-                            ShowPlayerErrorMessage("Invalid move! You must click on the ground to move.");
-                            Debug.Log("Attempted to move to a non-ground location during Charge phase.");
+                            // Check if the player clicked on the charge target
+                            ModelController clickedModel = hit.transform.GetComponent<ModelController>();
+                            if (clickedModel != null && clickedModel == chargeController.ChargeTargetModel)
+                            {
+                                // Player clicked directly on the target model
+                                chargeController.SetDirectCharge(true); // Direct charge
+                                HandleMovement(clickedModel.transform.position); // Move directly to the target's position
+                            }
+                            else
+                            {
+                                ShowPlayerErrorMessage("Invalid move! You must click on the ground or the target model to move.");
+                                Debug.Log("Attempted to move to a non-ground location during Charge phase.");
+                            }
                         }
                     }
                     else if (chargeState == ChargeController.ChargePhaseState.PendingTarget)
@@ -401,22 +413,12 @@ public class GameController : MonoBehaviour
             if (isColliding)
             {
                 Debug.Log("Charge collision successful.");
-                ShowPlayerErrorMessage("Charge successful! You can move the model to collide with the target.");
-                EnableEndTurnButton();
-
-                // Mark as charged
-                selectedModel.SetCharged();
-
-                // Reset charge state
-                chargeController.chargeState = ChargeController.ChargePhaseState.None;
+                chargeController.CheckChargeCollision();
             }
             else
             {
                 Debug.Log("Charge collision failed.");
-                ShowPlayerErrorMessage("Move does not collide with the target. Please choose a different location.");
-                Debug.Log("Move does not collide with the charge target.");
-                // Do not perform surge move. Allow the player to attempt moving again.
-                // Keep chargeState as AwaitingMovement
+                chargeController.CheckChargeCollision();
             }
         }
 

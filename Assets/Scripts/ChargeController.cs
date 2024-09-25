@@ -27,6 +27,9 @@ public class ChargeController : MonoBehaviour
 
     public ChargePhaseState chargeState = ChargePhaseState.None; // Current state
 
+    // Flag to determine if the charge was direct
+    private bool isDirectCharge = false;
+
     // Public properties to access charge distance and target
     public float ChargeDistance
     {
@@ -203,6 +206,9 @@ public class ChargeController : MonoBehaviour
 
             // Update state to AwaitingMovement
             chargeState = ChargePhaseState.AwaitingMovement;
+
+            // Reset the direct charge flag
+            isDirectCharge = false;
         }
 
         // Do NOT mark as charged here. Only mark as charged after successful movement.
@@ -266,7 +272,20 @@ public class ChargeController : MonoBehaviour
         if (isColliding)
         {
             Debug.Log("Charge collision successful.");
-            gameController.ShowPlayerErrorMessage("Charge successful! You can move the model to collide with the target.");
+
+            if (isDirectCharge)
+            {
+                // Direct charge into the target model
+                gameController.ShowPlayerErrorMessage("Charge successful! You can move the model to collide with the target.");
+                Debug.Log("Displayed message for direct charge.");
+            }
+            else
+            {
+                // Charge into a nearby location
+                gameController.ShowPlayerErrorMessage("Charge successful!");
+                Debug.Log("Displayed generic charge successful message.");
+            }
+
             gameController.EnableEndTurnButton();
 
             // Mark as charged
@@ -274,13 +293,16 @@ public class ChargeController : MonoBehaviour
 
             // Reset charge state
             chargeState = ChargePhaseState.None;
+
+            // Reset the direct charge flag
+            isDirectCharge = false;
         }
         else
         {
             Debug.Log("Charge collision failed.");
             gameController.ShowPlayerErrorMessage("Move does not collide with the target. Please choose a different location.");
             Debug.Log("Move does not collide with the charge target.");
-            // Do not perform surge move. Allow the player to attempt moving again.
+            // Do NOT perform surge move. Allow the player to attempt moving again.
             // Keep chargeState as AwaitingMovement
         }
     }
@@ -321,6 +343,15 @@ public class ChargeController : MonoBehaviour
             currentChargeIndicator = null;
         }
         chargeState = ChargePhaseState.None; // Reset state
+    }
+
+    /// <summary>
+    /// Sets the direct charge flag to true.
+    /// </summary>
+    public void SetDirectCharge(bool isDirect)
+    {
+        isDirectCharge = isDirect;
+        Debug.Log($"Direct charge set to: {isDirectCharge}");
     }
 }
 
