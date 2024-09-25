@@ -20,9 +20,9 @@ public class GameController : MonoBehaviour
     public static GameController Instance; // Singleton instance
 
     [Header("UI Elements")]
-    public TextMeshProUGUI roundText;  
-    public TextMeshProUGUI phaseText;  
-    public TextMeshProUGUI playerText;  
+    public TextMeshProUGUI roundText;
+    public TextMeshProUGUI phaseText;
+    public TextMeshProUGUI playerText;
     public TextMeshProUGUI playerErrorText; // Reference to the Player Error Text UI
 
     [Header("Movement Indicators")]
@@ -38,11 +38,11 @@ public class GameController : MonoBehaviour
     [Header("Controllers")]
     public ChargeController chargeController; // Reference to the ChargeController
 
-    private int currentRound = 1;       
-    private Phase currentPhase;         
-    private int currentPlayer = 1;      
+    private int currentRound = 1;
+    private Phase currentPhase;
+    private int currentPlayer = 1;
 
-    private int totalPlayers = 2;       
+    private int totalPlayers = 2;
 
     private List<GameObject> player1Models = new List<GameObject>();  // List of Player 1's models
     private List<GameObject> player2Models = new List<GameObject>();  // List of Player 2's models
@@ -91,7 +91,7 @@ public class GameController : MonoBehaviour
 
     void Start()
     {
-        currentPhase = Phase.Movement; 
+        currentPhase = Phase.Movement;
         Debug.Log($"Starting game at Round {currentRound}, Phase {currentPhase}.");
         UpdateUI();
         InitializePlayerModels(); // Initialize and track player models
@@ -99,7 +99,7 @@ public class GameController : MonoBehaviour
         HidePlayerErrorMessage(); // Hide the player error message initially
 
         // Get the ShootingController component
-        shootingController = GetComponent<ShootingController>(); 
+        shootingController = GetComponent<ShootingController>();
         if (shootingController == null)
         {
             Debug.LogError("ShootingController component is missing on GameController!");
@@ -162,45 +162,88 @@ public class GameController : MonoBehaviour
                 Debug.Log("Raycast hit: " + hit.collider.name); // Log what the raycast hit
 
                 ModelController model = hit.transform.GetComponent<ModelController>();
-                if (model != null && model.playerID == currentPlayer) // Check if it's a valid model and belongs to the current player
+                Phase currentPhaseLocal = currentPhase; // Cache the current phase
+
+                if (currentPhaseLocal == Phase.Charge)
                 {
-                    // Prevent selecting models that cannot charge during Charge phase
-                    if (currentPhase == Phase.Charge)
+                    ChargeController.ChargePhaseState chargeState = chargeController.chargeState;
+
+                    if (chargeState == ChargeController.ChargePhaseState.AwaitingMovement)
                     {
-                        if (model.HasMarched() || model.HasCharged())
+                        // Handle movement clicks during Charge phase
+                        if (hit.collider.CompareTag("Ground"))
                         {
-                            ShowPlayerErrorMessage("This model cannot charge!");
-                            Debug.Log("Attempted to select a model that cannot charge.");
-                            return; // Do not select the model
+                            HandleMovement(hit.point); // Pass the hit point to handle movement
+                        }
+                        else
+                        {
+                            ShowPlayerErrorMessage("Invalid move! You must click on the ground to move.");
+                            Debug.Log("Attempted to move to a non-ground location during Charge phase.");
                         }
                     }
-
-                    SelectModel(model); // Select the model
-                }
-                else if (selectedModel != null && (currentPhase == Phase.Movement || currentPhase == Phase.Charge) && hit.collider.CompareTag("Ground")) // Move if ground is clicked and a model is selected, in movement or charge phase
-                {
-                    HandleMovement(hit.point); // Pass the hit point to handle movement
-                }
-                else if (selectedModel != null && (currentPhase == Phase.FirstFire || currentPhase == Phase.AdvanceFire)) // Handle shooting in shooting phases
-                {
-                    ModelController targetModel = hit.transform.GetComponent<ModelController>();
-                    if (targetModel != null && targetModel.playerID != currentPlayer) // Target model must belong to the opposing player
+                    else if (chargeState == ChargeController.ChargePhaseState.PendingTarget)
                     {
-                        shootingController.HandleShooting(targetModel); // Handle shooting logic
+                        // Handle charge target selection
+                        if (model != null && model.playerID != currentPlayer) // Ensure it's an enemy model
+                        {
+                            chargeController.SelectChargeTarget(model);
+                        }
+                        else
+                        {
+                            ShowPlayerErrorMessage("Invalid charge target! You must select an enemy model to charge.");
+                            Debug.Log("Invalid charge target selected during Charge phase.");
+                        }
+                    }
+                    else
+                    {
+                        // chargeState == None, prompt player to select a model
+                        if (model != null && model.playerID == currentPlayer)
+                        {
+                            // Prevent selecting models that cannot charge during Charge phase
+                            if (model.HasMarched() || model.HasCharged())
+                            {
+                                ShowPlayerErrorMessage("This model cannot charge!");
+                                Debug.Log("Attempted to select a model that cannot charge.");
+                                return; // Do not select the model
+                            }
+
+                            // Select the model and display charge range indicator
+                            SelectModel(model);
+                            chargeController.DisplayChargeRangeIndicator(model);
+                        }
+                        else
+                        {
+                            ShowPlayerErrorMessage("Select one of your own models to initiate a charge.");
+                            Debug.Log("No valid model selected for charging.");
+                        }
                     }
                 }
-                else if (selectedModel != null && currentPhase == Phase.Charge) // Handle charging target selection in Charge phase
+                else
                 {
-                    ModelController targetModel = hit.transform.GetComponent<ModelController>();
-                    if (targetModel != null && targetModel.playerID != currentPlayer)
+                    // Handle selections for other phases
+                    if (model != null && model.playerID == currentPlayer)
                     {
-                        chargeController.SelectChargeTarget(targetModel); // Delegate to ChargeController
-                        Debug.Log($"Charge initiated from {selectedModel.gameObject.name} to {targetModel.gameObject.name}.");
+                        // Prevent selecting models that cannot perform actions
+                        // Implement phase-specific selection logic here
+                        SelectModel(model);
+                    }
+                    else if (selectedModel != null && hit.collider.CompareTag("Ground"))
+                    {
+                        // Handle regular movement clicks
+                        HandleMovement(hit.point);
+                    }
+                    else if (selectedModel != null && (currentPhaseLocal == Phase.FirstFire || currentPhaseLocal == Phase.AdvanceFire))
+                    {
+                        ModelController targetModel = hit.transform.GetComponent<ModelController>();
+                        if (targetModel != null && targetModel.playerID != currentPlayer) // Target model must belong to the opposing player
+                        {
+                            shootingController.HandleShooting(targetModel); // Handle shooting logic
+                        }
                     }
                 }
             }
         }
-    }
+        }
 
     /// <summary>
     /// Handles the movement of the selected model to the target position.
@@ -211,6 +254,13 @@ public class GameController : MonoBehaviour
         if (selectedModel == null)
         {
             Debug.LogError("No model selected for movement.");
+            return;
+        }
+
+        if (currentPhase == Phase.Charge && chargeController.chargeState != ChargeController.ChargePhaseState.AwaitingMovement)
+        {
+            ShowPlayerErrorMessage("No charge target selected!");
+            Debug.Log("Attempted to move during Charge phase without a charge target.");
             return;
         }
 
@@ -226,26 +276,38 @@ public class GameController : MonoBehaviour
 
         if (currentPhase == Phase.Charge)
         {
-            // During Charge phase, allow movement up to chargeDistance
-            float chargeDistance = chargeController.ChargeDistance;
-            Debug.Log($"Charge Distance: {chargeDistance}");
+            // During Charge phase, allow movement only to positions that collide with the charge target
+            float currentChargeDistance = chargeController.ChargeDistance;
+            Debug.Log($"Current Charge Distance: {currentChargeDistance}");
 
-            if (newDistance <= chargeDistance)
-            {
-                Debug.Log("Move is within charge distance.");
-                selectedModel.UpdateMovement(newDistance);
-                selectedModel.MoveTo(targetPosition, newDistance);
-                HidePlayerErrorMessage();
+            // Calculate distance from current position to target position
+            float moveDistance = Vector3.Distance(selectedModel.transform.position, targetPosition);
 
-                // After moving, check for collision with the target
-                StartCoroutine(CheckChargeCollision());
-            }
-            else
+            if (moveDistance > currentChargeDistance)
             {
-                Debug.Log("Move is outside charge distance.");
-                ShowPlayerErrorMessage("Invalid move! Please move within the charge distance.");
+                ShowPlayerErrorMessage("Invalid move! Destination is outside the current charge range.");
+                Debug.Log("Destination is outside the current charge range.");
                 DisableEndTurnButton();
+                return;
             }
+
+            // Check if moving to the target position would collide with the charge target
+            bool wouldCollide = SimulateCollisionAtPosition(selectedModel, targetPosition, chargeController.ChargeTargetModel);
+            if (!wouldCollide)
+            {
+                ShowPlayerErrorMessage("Invalid move! The position does not collide with the charge target.");
+                Debug.Log("Move does not collide with the charge target.");
+                DisableEndTurnButton();
+                return;
+            }
+
+            // Move the model to the clicked location
+            selectedModel.UpdateMovement(moveDistance);
+            selectedModel.MoveTo(targetPosition, moveDistance); // Move to the clicked location
+            HidePlayerErrorMessage();
+
+            // After moving, check for collision with the target
+            StartCoroutine(CheckChargeCollision());
         }
         else
         {
@@ -282,6 +344,38 @@ public class GameController : MonoBehaviour
     }
 
     /// <summary>
+    /// Simulates if moving the model to the target position would collide with the charge target.
+    /// </summary>
+    /// <param name="model">The model being moved.</param>
+    /// <param name="targetPosition">The target position.</param>
+    /// <param name="targetModel">The charge target model.</param>
+    /// <returns>True if collision would occur, else false.</returns>
+    bool SimulateCollisionAtPosition(ModelController model, Vector3 targetPosition, ModelController targetModel)
+    {
+        Collider modelCollider = model.GetComponent<Collider>();
+        Collider targetCollider = targetModel.GetComponent<Collider>();
+
+        if (modelCollider == null || targetCollider == null)
+        {
+            Debug.LogError("One or both models do not have colliders.");
+            return false;
+        }
+
+        // Get the bounds of the charge target
+        Bounds targetBounds = targetCollider.bounds;
+
+        // Get the bounds of the charging model at the target position
+        Bounds modelBounds = modelCollider.bounds;
+        Vector3 modelSize = modelBounds.size;
+        Vector3 simulatedPosition = new Vector3(targetPosition.x, modelBounds.center.y, targetPosition.z);
+        Bounds simulatedModelBounds = new Bounds(simulatedPosition, modelSize);
+
+        bool isColliding = simulatedModelBounds.Intersects(targetBounds);
+        Debug.Log($"Simulated Collision at {targetPosition}: {isColliding}");
+        return isColliding;
+    }
+
+    /// <summary>
     /// Coroutine to check collision after moving during Charge phase.
     /// </summary>
     /// <returns></returns>
@@ -292,7 +386,7 @@ public class GameController : MonoBehaviour
         if (currentPhase != Phase.Charge || selectedModel == null)
             yield break;
 
-        ModelController targetModel = chargeController.ChargeTarget;
+        ModelController targetModel = chargeController.ChargeTargetModel;
 
         if (targetModel == null)
         {
@@ -306,14 +400,20 @@ public class GameController : MonoBehaviour
         if (isColliding)
         {
             Debug.Log("Charge collision successful.");
-            ShowPlayerErrorMessage("Charge successful! End your turn.");
+            ShowPlayerErrorMessage("Charge successful! You can move the model to collide with the target.");
             EnableEndTurnButton();
+
+            // Mark as charged
+            selectedModel.SetCharged();
+
+            // Reset charge state
+            chargeController.chargeState = ChargeController.ChargePhaseState.None;
         }
         else
         {
             Debug.Log("Charge collision failed.");
-            ShowPlayerErrorMessage("Charge did not collide with the target. Please attempt to collide.");
-            DisableEndTurnButton();
+            ShowPlayerErrorMessage("Charge did not collide with the target. Performing surge move.");
+            chargeController.PerformSurgeMove(); // Automatically perform surge move
         }
     }
 
@@ -322,7 +422,7 @@ public class GameController : MonoBehaviour
     /// </summary>
     void HandleDeselect()
     {
-        if (Input.GetKeyDown(KeyCode.Escape) && selectedModel != null) // Deselect with Escape key
+        if (Input.GetKeyDown(KeyCode.Escape) && selectedModel != null)
         {
             DeselectAllModels();
             Debug.Log("Model deselected via Escape key.");
@@ -387,6 +487,12 @@ public class GameController : MonoBehaviour
             Debug.Log($"Deselecting model: {selectedModel.gameObject.name}");
             selectedModel.DeselectModel();
             selectedModel = null;
+
+            // Hide charge range indicator if in Charge phase
+            if (currentPhase == Phase.Charge)
+            {
+                chargeController.HideChargeRangeIndicator();
+            }
         }
         weaponUIController.HideWeaponUI(); // Hide the weapon UI when nothing is selected
         shootingController.HideWeaponRangeIndicator(); // Hide the weapon range indicator when deselected
@@ -422,7 +528,7 @@ public class GameController : MonoBehaviour
         if (currentPlayer > totalPlayers)
         {
             currentPlayer = 1;
-            NextPhase(); 
+            NextPhase();
         }
         DeselectAllModels(); // Deselect models at the end of the turn
         UpdateUI();
@@ -436,12 +542,12 @@ public class GameController : MonoBehaviour
     {
         if (currentPhase == Phase.AdvanceFire)
         {
-            EndRound(); 
+            EndRound();
         }
         else
         {
             currentPhase++;
-            UpdateUI(); 
+            UpdateUI();
 
             if (currentPhase == Phase.Charge)
             {
@@ -534,7 +640,7 @@ public class GameController : MonoBehaviour
     /// </summary>
     void InitializePlayerModels()
     {
-        ModelController[] allModels = FindObjectsOfType<ModelController>(); 
+        ModelController[] allModels = FindObjectsOfType<ModelController>();
         foreach (ModelController model in allModels)
         {
             if (model.playerID == 1)
@@ -643,7 +749,7 @@ public class GameController : MonoBehaviour
         // Reset ChargeController if needed
         if (chargeController != null)
         {
-            // Additional reset logic if necessary
+            chargeController.HideChargeRangeIndicator(); // Ensure charge indicators are hidden
             Debug.Log("All models have been reset.");
         }
     }
