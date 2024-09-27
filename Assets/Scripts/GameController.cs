@@ -37,6 +37,7 @@ public class GameController : MonoBehaviour
 
     [Header("Controllers")]
     public ChargeController chargeController; // Reference to the ChargeController
+    public FightController fightController; // Reference to the FightController
 
     private int currentRound = 1;
     private Phase currentPhase;
@@ -85,6 +86,20 @@ public class GameController : MonoBehaviour
             else
             {
                 Debug.Log("ChargeController successfully linked in GameController.");
+            }
+        }
+
+        // Ensure FightController is assigned
+        if (fightController == null)
+        {
+            fightController = GetComponent<FightController>();
+            if (fightController == null)
+            {
+                Debug.LogError("FightController component is missing on GameController!");
+            }
+            else
+            {
+                Debug.Log("FightController successfully linked in GameController.");
             }
         }
     }
@@ -238,6 +253,10 @@ public class GameController : MonoBehaviour
                             Debug.Log("No valid model selected for charging.");
                         }
                     }
+                }
+                else if (currentPhaseLocal == Phase.Fight)
+                {
+                    // Fight phase selection handled by FightController
                 }
                 else
                 {
@@ -496,6 +515,11 @@ public class GameController : MonoBehaviour
                 // No additional action on selection during Charge phase
                 Debug.Log("Model selected during Charge phase.");
             }
+            else if (currentPhase == Phase.Fight)
+            {
+                // Fight phase selections are handled by FightController
+                Debug.Log("Fight phase selection should be handled by FightController.");
+            }
         }
 
         /// <summary>
@@ -574,6 +598,11 @@ public class GameController : MonoBehaviour
                 {
                     Debug.Log("Entering Charge Phase.");
                     ResetStartPositionsForCharge(); // Reset starting positions at the start of Charge phase
+                }
+                else if (currentPhase == Phase.Fight)
+                {
+                    Debug.Log("Entering Fight Phase.");
+                    fightController.StartFightPhase(); // Start the Fight phase
                 }
                 else
                 {
