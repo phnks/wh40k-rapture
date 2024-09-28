@@ -42,6 +42,7 @@ public class FightController : MonoBehaviour
 
         if (fightButton != null)
         {
+            fightButton.onClick.RemoveAllListeners(); // Remove any existing listeners
             fightButton.onClick.AddListener(ResolveSelectedFight);
             fightButton.gameObject.SetActive(false); // Hide initially
         }
@@ -295,8 +296,10 @@ public class FightController : MonoBehaviour
             return;
         }
 
-        Debug.Log($"Resolving fight with {selectedFight.participants.Count} models.");
-        gameController.ShowPlayerErrorMessage($"Player {gameController.GetCurrentPlayer()} is resolving a fight.");
+        int currentPlayer = gameController.GetCurrentPlayer();
+        Debug.Log($"[ResolveSelectedFight] Current Player: {currentPlayer}");
+        Debug.Log($"Resolving fight with {selectedFight.participants.Count} models by Player {currentPlayer}.");
+        gameController.ShowPlayerErrorMessage($"Player {currentPlayer} is resolving a fight.");
 
         // Placeholder for fight resolution logic
         // TODO: Implement actual fight resolution mechanics
@@ -306,11 +309,13 @@ public class FightController : MonoBehaviour
         UnhighlightFightModels(selectedFight);
         selectedFight = null;
         fightButton.gameObject.SetActive(false);
+        Debug.Log($"Fight resolved by Player {currentPlayer}.");
 
         // Check if there are more fights to resolve
         if (activeFights.Count > 0)
         {
             gameController.IncrementPlayer(); // Switch to the next player
+            Debug.Log($"Player incremented to Player {gameController.GetCurrentPlayer()}.");
             PromptPlayerToSelectFight();
         }
         else
@@ -318,15 +323,6 @@ public class FightController : MonoBehaviour
             Debug.Log("All fights resolved. Ending Fight phase.");
             EndFightPhase();
         }
-    }
-
-    /// <summary>
-    /// Switches the turn to the next player.
-    /// </summary>
-    private void SwitchPlayerTurn()
-    {
-        gameController.IncrementPlayer();
-        Debug.Log($"Switched turn to Player {gameController.GetCurrentPlayer()}.");
     }
 
     /// <summary>
