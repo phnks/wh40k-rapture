@@ -14,7 +14,6 @@ public class FightController : MonoBehaviour
 
     private GameController gameController;
     private List<Fight> activeFights = new List<Fight>();
-    private int currentPlayer = 1;
     private Fight selectedFight = null;
 
     // Represents a fight containing participating models
@@ -68,7 +67,12 @@ public class FightController : MonoBehaviour
     {
         Debug.Log("Fight phase started.");
         FindAllFights();
-        currentPlayer = 1; // Starting with Player 1
+        if (activeFights.Count == 0)
+        {
+            Debug.Log("No fights detected. Ending Fight phase.");
+            EndFightPhase();
+            return;
+        }
         PromptPlayerToSelectFight();
     }
 
@@ -163,6 +167,7 @@ public class FightController : MonoBehaviour
     /// </summary>
     private void PromptPlayerToSelectFight()
     {
+        int currentPlayer = gameController.GetCurrentPlayer();
         Debug.Log($"Player {currentPlayer}, select a fight to resolve.");
         gameController.ShowPlayerErrorMessage($"Player {currentPlayer}, select a fight to resolve.");
     }
@@ -170,6 +175,7 @@ public class FightController : MonoBehaviour
     void Update()
     {
         HandleFightSelection();
+        HandleDeselect();
     }
 
     /// <summary>
@@ -177,6 +183,9 @@ public class FightController : MonoBehaviour
     /// </summary>
     private void HandleFightSelection()
     {
+        if (gameController.GetCurrentPhase() != GameController.Phase.Fight)
+            return;
+
         if (Input.GetMouseButtonDown(0) && !UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject())
         {
             // Use the screen center (reticle) for raycasting
@@ -192,6 +201,7 @@ public class FightController : MonoBehaviour
                     Fight fight = activeFights.FirstOrDefault(f => f.participants.Contains(clickedModel));
                     if (fight != null)
                     {
+                        int currentPlayer = gameController.GetCurrentPlayer();
                         if (fight.participants.Any(m => m.playerID == currentPlayer))
                         {
                             SelectFight(fight);
@@ -204,6 +214,21 @@ public class FightController : MonoBehaviour
                     }
                 }
             }
+        }
+    }
+
+    /// <summary>
+    /// Handles deselection when the Escape key is pressed.
+    /// </summary>
+    private void HandleDeselect()
+    {
+        if (gameController.GetCurrentPhase() != GameController.Phase.Fight)
+            return;
+
+        if (Input.GetKeyDown(KeyCode.Escape) && selectedFight != null)
+        {
+            DeselectCurrentFight();
+            Debug.Log("Fight deselected via Escape key.");
         }
     }
 
@@ -271,7 +296,7 @@ public class FightController : MonoBehaviour
         }
 
         Debug.Log($"Resolving fight with {selectedFight.participants.Count} models.");
-        gameController.ShowPlayerErrorMessage($"Player {currentPlayer} is resolving a fight.");
+        gameController.ShowPlayerErrorMessage($"Player {gameController.GetCurrentPlayer()} is resolving a fight.");
 
         // Placeholder for fight resolution logic
         // TODO: Implement actual fight resolution mechanics
@@ -285,7 +310,7 @@ public class FightController : MonoBehaviour
         // Check if there are more fights to resolve
         if (activeFights.Count > 0)
         {
-            SwitchPlayerTurn();
+            gameController.IncrementPlayer(); // Switch to the next player
             PromptPlayerToSelectFight();
         }
         else
@@ -300,8 +325,8 @@ public class FightController : MonoBehaviour
     /// </summary>
     private void SwitchPlayerTurn()
     {
-        currentPlayer = (currentPlayer == 1) ? 2 : 1;
-        Debug.Log($"Switched turn to Player {currentPlayer}.");
+        gameController.IncrementPlayer();
+        Debug.Log($"Switched turn to Player {gameController.GetCurrentPlayer()}.");
     }
 
     /// <summary>

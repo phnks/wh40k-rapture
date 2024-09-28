@@ -581,6 +581,31 @@ public class GameController : MonoBehaviour
         }
 
         /// <summary>
+        /// Sets the current player to the specified player ID.
+        /// </summary>
+        /// <param name="playerID">Player ID to set (1 or 2).</param>
+        public void SetCurrentPlayer(int playerID)
+        {
+            currentPlayer = playerID;
+            UpdateUI();
+            Debug.Log($"Current player set to Player {currentPlayer}.");
+        }
+
+        /// <summary>
+        /// Increments the current player. Wraps around to 1 after the last player.
+        /// </summary>
+        public void IncrementPlayer()
+        {
+            currentPlayer++;
+            if (currentPlayer > totalPlayers)
+            {
+                currentPlayer = 1;
+            }
+            UpdateUI();
+            Debug.Log($"Current player incremented to Player {currentPlayer}.");
+        }
+
+        /// <summary>
         /// Advances to the next phase or ends the round if in the last phase.
         /// </summary>
         public void NextPhase()
@@ -592,6 +617,7 @@ public class GameController : MonoBehaviour
             else
             {
                 currentPhase++;
+                SetCurrentPlayer(1); // Reset to Player 1 at the start of a new phase
                 UpdateUI();
 
                 if (currentPhase == Phase.Charge)
@@ -653,6 +679,7 @@ public class GameController : MonoBehaviour
             // Reset each model's movement, march, and charge status
             ResetAllModels();
 
+            SetCurrentPlayer(1); // Ensure the new round starts with Player 1
             UpdateUI();
         }
 
