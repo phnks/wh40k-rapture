@@ -28,7 +28,7 @@ public class FightController : MonoBehaviour
     private HashSet<ModelController> availableFighters;
     private HashSet<ModelController> usedFighters;
 
-    private int currentPlayer;
+    private int currentPlayer; // Managed independently within FightController
 
     private bool isResolvingFight = false;
     private ModelController selectedModelForPileInMove = null;
@@ -132,7 +132,6 @@ public class FightController : MonoBehaviour
     {
         if (fightPhaseState == FightPhaseState.SelectingFight)
         {
-            Debug.Log("FightController: Currently in SelectingFight state.");
             HandleFightSelection();
             HandleDeselect();
         }
@@ -233,43 +232,76 @@ public class FightController : MonoBehaviour
             {
                 Debug.Log($"FightController: Available fighters in Initiative Round {currentInitiativeRound}: {availableFighters.Count}");
                 usedFighters = new HashSet<ModelController>();
-                currentPlayer = gameController.GetCurrentPlayer();
-                Debug.Log($"FightController: Current Player is Player {currentPlayer}.");
 
-                while (availableFighters.Any(m => m.playerID == currentPlayer && !usedFighters.Contains(m)))
+                // Initialize currentPlayer to Player 1 at the start of the initiative round
+                currentPlayer = 1;
+                Debug.Log($"FightController: Starting Initiative Round {currentInitiativeRound} with Player {currentPlayer}.");
+
+                bool fightersLeft = true;
+                int playersChecked = 0;
+                int totalPlayers = 2; // Assuming two players; adjust if more players are involved
+
+                while (fightersLeft && playersChecked < totalPlayers)
                 {
-                    gameController.ShowPlayerErrorMessage($"Player {currentPlayer}, select a model to perform a pile in move.");
-                    Debug.Log($"FightController: Prompting Player {currentPlayer} to select a model for pile in move.");
-                    fightPhaseState = FightPhaseState.PileInMove;
+                    var fightersForCurrentPlayer = availableFighters
+                        .Where(m => m.playerID == currentPlayer && !usedFighters.Contains(m))
+                        .ToList();
 
-                    yield return StartCoroutine(WaitForModelSelection());
-
-                    if (selectedModelForPileInMove != null)
+                    if (fightersForCurrentPlayer.Count > 0)
                     {
-                        Debug.Log($"FightController: Model {selectedModelForPileInMove.gameObject.name} selected for pile in move.");
-                        yield return StartCoroutine(HandlePileInMove(selectedModelForPileInMove));
-                        usedFighters.Add(selectedModelForPileInMove);
-                        Debug.Log($"FightController: Model {selectedModelForPileInMove.gameObject.name} added to usedFighters.");
-                        selectedModelForPileInMove = null;
+                        // Prompt currentPlayer to select a model
+                        gameController.ShowPlayerErrorMessage($"Player {currentPlayer}, select a model to perform a pile in move.");
+                        Debug.Log($"FightController: Prompting Player {currentPlayer} to select a model for pile in move.");
+                        fightPhaseState = FightPhaseState.PileInMove;
 
+                        yield return StartCoroutine(WaitForModelSelection());
+
+                        if (selectedModelForPileInMove != null)
+                        {
+                            Debug.Log($"FightController: Model {selectedModelForPileInMove.gameObject.name} selected for pile in move.");
+                            yield return StartCoroutine(HandlePileInMove(selectedModelForPileInMove));
+                            usedFighters.Add(selectedModelForPileInMove);
+                            Debug.Log($"FightController: Model {selectedModelForPileInMove.gameObject.name} added to usedFighters.");
+                            selectedModelForPileInMove = null;
+
+                            // Switch to the other player
+                            currentPlayer = (currentPlayer == 1) ? 2 : 1;
+                            Debug.Log($"FightController: Switched to Player {currentPlayer}.");
+                        }
+                        else
+                        {
+                            // If no model was selected, skip to next player
+                            Debug.Log($"FightController: No model selected by Player {currentPlayer}.");
+                            currentPlayer = (currentPlayer == 1) ? 2 : 1;
+                            Debug.Log($"FightController: Switched to Player {currentPlayer}.");
+                        }
+                    }
+                    else
+                    {
+                        Debug.Log($"FightController: Player {currentPlayer} has no available fighters.");
                         // Switch to the other player
                         currentPlayer = (currentPlayer == 1) ? 2 : 1;
                         Debug.Log($"FightController: Switched to Player {currentPlayer}.");
 
-                        // Check if the next player has any available fighters
-                        if (!availableFighters.Any(m => m.playerID == currentPlayer && !usedFighters.Contains(m)))
-                        {
-                            // If not, switch back
-                            currentPlayer = (currentPlayer == 1) ? 2 : 1;
-                            Debug.Log($"FightController: Player {currentPlayer} has no available fighters. Switching back.");
-                            if (!availableFighters.Any(m => m.playerID == currentPlayer && !usedFighters.Contains(m)))
-                            {
-                                // No available fighters for any player
-                                Debug.Log("FightController: No available fighters for any player. Exiting loop.");
-                                break;
-                            }
-                        }
+                        playersChecked++;
                     }
+
+                    // Check if the next player has available fighters
+                    var fightersForNextPlayer = availableFighters
+                        .Where(m => m.playerID == currentPlayer && !usedFighters.Contains(m))
+                        .ToList();
+
+                    if (fightersForNextPlayer.Count == 0)
+                    {
+                        playersChecked++;
+                    }
+                    else
+                    {
+                        playersChecked = 0; // Reset if a player has fighters
+                    }
+
+                    // Determine if there are fighters left
+                    fightersLeft = availableFighters.Any(m => !usedFighters.Contains(m));
                 }
             }
 
@@ -597,8 +629,6 @@ public class FightController : MonoBehaviour
     /// </summary>
     private void HandleFightSelection()
     {
-        Debug.Log("FightController: HandleFightSelection called.");
-
         if (Input.GetMouseButtonDown(0) && !UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject())
         {
             // Use the screen center (reticle) for raycasting
@@ -616,8 +646,8 @@ public class FightController : MonoBehaviour
                     Fight fight = activeFights.FirstOrDefault(f => f.participants.Contains(clickedModel));
                     if (fight != null)
                     {
-                        int currentPlayerId = gameController.GetCurrentPlayer();
-                        if (fight.participants.Any(m => m.playerID == currentPlayerId))
+                        // Check if the fight includes models from existing players
+                        if (fight.participants.Any(m => m.playerID == 1) || fight.participants.Any(m => m.playerID == 2))
                         {
                             SelectFight(fight);
                             Debug.Log("FightController: Fight selected and highlighted.");
