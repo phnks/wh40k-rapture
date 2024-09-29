@@ -474,7 +474,7 @@ public class GameController : MonoBehaviour
         /// Selects a model for interaction.
         /// </summary>
         /// <param name="model">The model to select.</param>
-        void SelectModel(ModelController model)
+        public void SelectModel(ModelController model)
         {
             if (selectedModel != null)
             {
