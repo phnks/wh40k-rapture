@@ -76,6 +76,7 @@ public class FightController : MonoBehaviour
             fightButton.onClick.RemoveAllListeners(); // Remove any existing listeners
             fightButton.onClick.AddListener(StartFightResolution);
             fightButton.gameObject.SetActive(false); // Hide initially
+            Debug.Log("Fight button listeners set and button hidden initially.");
         }
         else
         {
@@ -87,6 +88,7 @@ public class FightController : MonoBehaviour
             confirmPileInMoveButton.onClick.RemoveAllListeners();
             confirmPileInMoveButton.onClick.AddListener(ConfirmPileInMove);
             confirmPileInMoveButton.gameObject.SetActive(false); // Hide initially
+            Debug.Log("Confirm Pile In Move button listeners set and button hidden initially.");
         }
         else
         {
@@ -96,6 +98,7 @@ public class FightController : MonoBehaviour
         if (initiativeText != null)
         {
             initiativeText.gameObject.SetActive(false); // Hide initiative text initially
+            Debug.Log("Initiative text hidden initially.");
         }
         else
         {
@@ -106,6 +109,10 @@ public class FightController : MonoBehaviour
         {
             Debug.LogError("PileInMoveRangeIndicatorPrefab is not assigned in the Inspector!");
         }
+        else
+        {
+            Debug.Log("Pile In Move Range Indicator Prefab assigned.");
+        }
     }
 
     void Start()
@@ -115,6 +122,27 @@ public class FightController : MonoBehaviour
         {
             Debug.LogError("GameController instance not found!");
         }
+        else
+        {
+            Debug.Log("FightController successfully linked to GameController.");
+        }
+    }
+
+    void Update()
+    {
+        if (fightPhaseState == FightPhaseState.SelectingFight)
+        {
+            Debug.Log("FightController: Currently in SelectingFight state.");
+            HandleFightSelection();
+            HandleDeselect();
+        }
+        else if (fightPhaseState == FightPhaseState.None && gameController.GetCurrentPhase() == GameController.Phase.Fight)
+        {
+            // Ensure fightPhaseState is set correctly
+            PromptPlayerToSelectFight();
+            fightPhaseState = FightPhaseState.SelectingFight;
+            Debug.Log("FightController: FightPhaseState set to SelectingFight.");
+        }
     }
 
     /// <summary>
@@ -122,15 +150,16 @@ public class FightController : MonoBehaviour
     /// </summary>
     public void StartFightPhase()
     {
-        Debug.Log("Fight phase started.");
+        Debug.Log("FightController: StartFightPhase called.");
         FindAllFights();
         if (activeFights.Count == 0)
         {
-            Debug.Log("No fights detected. Ending Fight phase.");
+            Debug.Log("FightController: No fights detected. Ending Fight phase.");
             EndFightPhase();
             return;
         }
         fightPhaseState = FightPhaseState.SelectingFight;
+        Debug.Log("FightController: FightPhaseState set to SelectingFight.");
         PromptPlayerToSelectFight();
     }
 
@@ -139,11 +168,30 @@ public class FightController : MonoBehaviour
     /// </summary>
     private void StartFightResolution()
     {
+        Debug.Log("FightController: StartFightResolution called.");
         if (selectedFight == null)
         {
-            Debug.LogError("No fight selected to resolve.");
+            Debug.LogError("FightController: No fight selected to resolve.");
             gameController.ShowPlayerErrorMessage("No fight selected to resolve.");
             return;
+        }
+
+        // Deselect all models in the fight
+        foreach (var model in selectedFight.participants)
+        {
+            model.DeselectModel();
+            Debug.Log($"FightController: Model {model.gameObject.name} deselected.");
+        }
+
+        // Hide the Fight button
+        fightButton.gameObject.SetActive(false);
+        Debug.Log("FightController: Fight button hidden.");
+
+        // Reset starting positions for all models in the fight
+        foreach (var model in selectedFight.participants)
+        {
+            model.UpdateStartPosition();
+            Debug.Log($"FightController: Model {model.gameObject.name} start position updated.");
         }
 
         isResolvingFight = true;
@@ -152,6 +200,7 @@ public class FightController : MonoBehaviour
         UpdateInitiativeUI();
         initiativeText.gameObject.SetActive(true); // Show initiative text
         gameController.ShowPlayerErrorMessage($"Fight resolution started. Initiating at Round {currentInitiativeRound}.");
+        Debug.Log($"FightController: Fight resolution started at Round {currentInitiativeRound}.");
         fightResolutionCoroutine = StartCoroutine(FightResolutionCoroutine());
     }
 
@@ -160,9 +209,10 @@ public class FightController : MonoBehaviour
     /// </summary>
     private IEnumerator FightResolutionCoroutine()
     {
+        Debug.Log("FightController: FightResolutionCoroutine started.");
         while (currentInitiativeRound >= 1)
         {
-            Debug.Log($"Initiative Round {currentInitiativeRound}.");
+            Debug.Log($"FightController: Initiative Round {currentInitiativeRound}.");
             gameController.ShowPlayerErrorMessage($"Initiative Round {currentInitiativeRound}");
 
             availableFighters = new HashSet<ModelController>();
@@ -181,34 +231,41 @@ public class FightController : MonoBehaviour
 
             if (availableFighters.Count > 0)
             {
-                Debug.Log($"Available fighters in Initiative Round {currentInitiativeRound}: {availableFighters.Count}");
+                Debug.Log($"FightController: Available fighters in Initiative Round {currentInitiativeRound}: {availableFighters.Count}");
                 usedFighters = new HashSet<ModelController>();
                 currentPlayer = gameController.GetCurrentPlayer();
+                Debug.Log($"FightController: Current Player is Player {currentPlayer}.");
 
                 while (availableFighters.Any(m => m.playerID == currentPlayer && !usedFighters.Contains(m)))
                 {
                     gameController.ShowPlayerErrorMessage($"Player {currentPlayer}, select a model to perform a pile in move.");
+                    Debug.Log($"FightController: Prompting Player {currentPlayer} to select a model for pile in move.");
                     fightPhaseState = FightPhaseState.PileInMove;
 
                     yield return StartCoroutine(WaitForModelSelection());
 
                     if (selectedModelForPileInMove != null)
                     {
+                        Debug.Log($"FightController: Model {selectedModelForPileInMove.gameObject.name} selected for pile in move.");
                         yield return StartCoroutine(HandlePileInMove(selectedModelForPileInMove));
                         usedFighters.Add(selectedModelForPileInMove);
+                        Debug.Log($"FightController: Model {selectedModelForPileInMove.gameObject.name} added to usedFighters.");
                         selectedModelForPileInMove = null;
 
                         // Switch to the other player
                         currentPlayer = (currentPlayer == 1) ? 2 : 1;
+                        Debug.Log($"FightController: Switched to Player {currentPlayer}.");
 
                         // Check if the next player has any available fighters
                         if (!availableFighters.Any(m => m.playerID == currentPlayer && !usedFighters.Contains(m)))
                         {
                             // If not, switch back
                             currentPlayer = (currentPlayer == 1) ? 2 : 1;
+                            Debug.Log($"FightController: Player {currentPlayer} has no available fighters. Switching back.");
                             if (!availableFighters.Any(m => m.playerID == currentPlayer && !usedFighters.Contains(m)))
                             {
                                 // No available fighters for any player
+                                Debug.Log("FightController: No available fighters for any player. Exiting loop.");
                                 break;
                             }
                         }
@@ -218,12 +275,14 @@ public class FightController : MonoBehaviour
 
             currentInitiativeRound--;
             UpdateInitiativeUI();
+            Debug.Log($"FightController: Initiative Round decremented to {currentInitiativeRound}.");
             yield return null;
         }
 
         // Fight resolved
         gameController.ShowPlayerErrorMessage("Fight resolved.");
-        EndFightResolution();
+        Debug.Log("FightController: Fight resolved.");
+        EndFightPhase();
     }
 
     /// <summary>
@@ -232,6 +291,8 @@ public class FightController : MonoBehaviour
     private IEnumerator WaitForModelSelection()
     {
         selectedModelForPileInMove = null;
+        Debug.Log("FightController: Waiting for model selection for pile in move.");
+
         while (selectedModelForPileInMove == null && fightPhaseState == FightPhaseState.PileInMove)
         {
             if (Input.GetMouseButtonDown(0) && !UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject())
@@ -242,16 +303,18 @@ public class FightController : MonoBehaviour
 
                 if (Physics.Raycast(ray, out hit, 2000f))
                 {
+                    Debug.Log($"FightController: Raycast hit: {hit.transform.name}");
+
                     ModelController clickedModel = hit.transform.GetComponent<ModelController>();
                     if (clickedModel != null && availableFighters.Contains(clickedModel) && clickedModel.playerID == currentPlayer)
                     {
                         selectedModelForPileInMove = clickedModel;
-                        Debug.Log($"Model {clickedModel.gameObject.name} selected for pile in move.");
+                        Debug.Log($"FightController: Model {clickedModel.gameObject.name} selected for pile in move.");
                     }
                     else
                     {
                         gameController.ShowPlayerErrorMessage("Select one of your available fighters to perform a pile in move.");
-                        Debug.Log("Invalid model selected for pile in move.");
+                        Debug.Log("FightController: Invalid model selected for pile in move.");
                     }
                 }
             }
@@ -264,15 +327,17 @@ public class FightController : MonoBehaviour
     /// </summary>
     private IEnumerator HandlePileInMove(ModelController model)
     {
+        Debug.Log($"FightController: HandlePileInMove started for model {model.gameObject.name}.");
         gameController.ShowPlayerErrorMessage($"Player {currentPlayer}, perform a pile in move with {model.gameObject.name}.");
 
-        // Display pile in move range indicator
-        currentPileInMoveIndicator = Instantiate(pileInMoveRangeIndicatorPrefab, model.transform.position + Vector3.up * 60f, Quaternion.identity);
+        // Display pile in move range indicator at ground level (y = 60)
+        currentPileInMoveIndicator = Instantiate(pileInMoveRangeIndicatorPrefab, new Vector3(model.transform.position.x, 60f, model.transform.position.z), Quaternion.identity);
         float pileInMoveDistance = 3 * GameConstants.MOVEMENT_CONVERSION_FACTOR;
         currentPileInMoveIndicator.transform.localScale = new Vector3(pileInMoveDistance * 2, 0.01f, pileInMoveDistance * 2);
         Renderer renderer = currentPileInMoveIndicator.GetComponent<Renderer>();
         renderer.material.color = model.GetFactionColor();
         renderer.material.color = new Color(renderer.material.color.r, renderer.material.color.g, renderer.material.color.b, 0.3f);
+        Debug.Log($"FightController: Pile in move range indicator instantiated at {currentPileInMoveIndicator.transform.position} with scale {currentPileInMoveIndicator.transform.localScale}.");
 
         bool moveValid = false;
         Vector3 targetPosition = Vector3.zero;
@@ -291,7 +356,9 @@ public class FightController : MonoBehaviour
                     if (hit.collider.CompareTag("Ground"))
                     {
                         Vector3 clickedPosition = hit.point;
-                        float distance = Vector3.Distance(model.transform.position, clickedPosition);
+                        float distance = Vector3.Distance(new Vector3(model.transform.position.x, 60f, model.transform.position.z), new Vector3(clickedPosition.x, 60f, clickedPosition.z));
+
+                        Debug.Log($"FightController: Player clicked at {clickedPosition} with distance {distance}.");
 
                         if (distance <= pileInMoveDistance)
                         {
@@ -306,17 +373,18 @@ public class FightController : MonoBehaviour
 
                                     if (modelCollider == null || enemyCollider == null)
                                     {
-                                        Debug.LogError("Model or enemy does not have a collider.");
+                                        Debug.LogError("FightController: Model or enemy does not have a collider.");
                                         continue;
                                     }
 
                                     Bounds modelBounds = modelCollider.bounds;
-                                    Vector3 newPosition = new Vector3(clickedPosition.x, modelBounds.center.y, clickedPosition.z);
+                                    Vector3 newPosition = new Vector3(clickedPosition.x, 60f, clickedPosition.z);
                                     Bounds newModelBounds = new Bounds(newPosition, modelBounds.size);
 
                                     if (newModelBounds.Intersects(enemyCollider.bounds))
                                     {
                                         collidesWithEnemy = true;
+                                        Debug.Log($"FightController: New position {newPosition} intersects with enemy {enemy.gameObject.name}.");
                                         break;
                                     }
                                 }
@@ -328,18 +396,23 @@ public class FightController : MonoBehaviour
                                 model.MoveTo(targetPosition, distance);
                                 moveValid = true;
                                 gameController.ShowPlayerErrorMessage("Pile in move successful.");
+                                Debug.Log($"FightController: Pile in move successful. Model {model.gameObject.name} moved to {targetPosition}.");
                             }
                             else
                             {
                                 gameController.ShowPlayerErrorMessage("Invalid pile in move! Must collide with at least one enemy model.");
-                                Debug.Log("Move does not collide with any enemy models in the fight.");
+                                Debug.Log("FightController: Move does not collide with any enemy models in the fight.");
                             }
                         }
                         else
                         {
                             gameController.ShowPlayerErrorMessage("Pile in move out of range.");
-                            Debug.Log("Pile in move attempted out of range.");
+                            Debug.Log("FightController: Pile in move attempted out of range.");
                         }
+                    }
+                    else
+                    {
+                        Debug.Log("FightController: Clicked object is not tagged as 'Ground'.");
                     }
                 }
             }
@@ -350,13 +423,14 @@ public class FightController : MonoBehaviour
         if (currentPileInMoveIndicator != null)
         {
             Destroy(currentPileInMoveIndicator);
+            Debug.Log("FightController: Pile in move range indicator destroyed.");
             currentPileInMoveIndicator = null;
         }
 
         // Show the "Confirm Pile In Move" button
         confirmPileInMoveButton.gameObject.SetActive(true);
         gameController.ShowPlayerErrorMessage("Click 'Confirm Pile In Move' to finalize your action.");
-        Debug.Log("Pile in move performed. Awaiting confirmation.");
+        Debug.Log("FightController: Confirm Pile In Move button displayed.");
 
         // Wait until the player confirms the move
         while (confirmPileInMoveButton.gameObject.activeSelf && fightPhaseState == FightPhaseState.PileInMove)
@@ -366,6 +440,7 @@ public class FightController : MonoBehaviour
 
         // Reset the fight phase state
         fightPhaseState = FightPhaseState.ResolvingInitiativeRound;
+        Debug.Log("FightController: FightPhaseState set to ResolvingInitiativeRound after pile in move.");
     }
 
     /// <summary>
@@ -373,9 +448,10 @@ public class FightController : MonoBehaviour
     /// </summary>
     private void ConfirmPileInMove()
     {
+        Debug.Log("FightController: ConfirmPileInMove button clicked.");
         confirmPileInMoveButton.gameObject.SetActive(false);
         gameController.ShowPlayerErrorMessage("Pile in move confirmed.");
-        Debug.Log("Pile in move confirmed.");
+        Debug.Log("FightController: Pile in move confirmed.");
     }
 
     /// <summary>
@@ -386,20 +462,26 @@ public class FightController : MonoBehaviour
         if (initiativeText != null)
         {
             initiativeText.text = "Initiative Round: " + currentInitiativeRound;
+            Debug.Log($"FightController: Initiative UI updated to Round {currentInitiativeRound}.");
         }
     }
 
     /// <summary>
-    /// Ends the Fight resolution process.
+    /// Ends the Fight phase and notifies the GameController.
     /// </summary>
-    private void EndFightResolution()
+    private void EndFightPhase()
     {
-        isResolvingFight = false;
-        selectedFight = null;
+        if (fightResolutionCoroutine != null)
+        {
+            StopCoroutine(fightResolutionCoroutine);
+            Debug.Log("FightController: Fight resolution coroutine stopped.");
+        }
+
         fightPhaseState = FightPhaseState.None;
+        selectedFight = null;
         initiativeText.gameObject.SetActive(false); // Hide initiative text
         gameController.NextPhase();
-        Debug.Log("Fight resolution ended.");
+        Debug.Log("FightController: Fight phase ended and NextPhase called.");
     }
 
     /// <summary>
@@ -407,6 +489,7 @@ public class FightController : MonoBehaviour
     /// </summary>
     public void FindAllFights()
     {
+        Debug.Log("FightController: FindAllFights called.");
         activeFights.Clear();
         List<ModelController> allModels = FindObjectsOfType<ModelController>().ToList();
 
@@ -422,9 +505,15 @@ public class FightController : MonoBehaviour
         {
             for (int j = i + 1; j < allModels.Count; j++)
             {
+                Debug.Log($"FightController: Checking collision between {allModels[i].gameObject.name} and {allModels[j].gameObject.name}.");
                 if (allModels[i].IsColliding(allModels[j]))
                 {
+                    Debug.Log($"FightController: {allModels[i].gameObject.name} and {allModels[j].gameObject.name} are colliding.");
                     Union(allModels[i], allModels[j], parent);
+                }
+                else
+                {
+                    Debug.Log($"FightController: {allModels[i].gameObject.name} and {allModels[j].gameObject.name} are not colliding.");
                 }
             }
         }
@@ -452,14 +541,18 @@ public class FightController : MonoBehaviour
                     fight.participants.Add(model);
                 }
                 activeFights.Add(fight);
-                Debug.Log($"Fight identified with {group.Count} models.");
+                Debug.Log($"FightController: Fight identified with {group.Count} models.");
             }
         }
 
         if (activeFights.Count == 0)
         {
-            Debug.Log("No fights detected. Ending Fight phase.");
+            Debug.Log("FightController: No fights detected. Ending Fight phase.");
             EndFightPhase();
+        }
+        else
+        {
+            Debug.Log($"FightController: Total fights identified: {activeFights.Count}.");
         }
     }
 
@@ -485,6 +578,7 @@ public class FightController : MonoBehaviour
         if (rootA != rootB)
         {
             parent[rootB] = rootA;
+            Debug.Log($"FightController: Unioned {a.gameObject.name} and {b.gameObject.name} under {rootA.gameObject.name}.");
         }
     }
 
@@ -494,7 +588,7 @@ public class FightController : MonoBehaviour
     private void PromptPlayerToSelectFight()
     {
         int currentPlayerId = gameController.GetCurrentPlayer();
-        Debug.Log($"Player {currentPlayerId}, select a fight to resolve.");
+        Debug.Log($"FightController: Player {currentPlayerId}, select a fight to resolve.");
         gameController.ShowPlayerErrorMessage($"Player {currentPlayerId}, select a fight to resolve.");
     }
 
@@ -503,6 +597,8 @@ public class FightController : MonoBehaviour
     /// </summary>
     private void HandleFightSelection()
     {
+        Debug.Log("FightController: HandleFightSelection called.");
+
         if (Input.GetMouseButtonDown(0) && !UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject())
         {
             // Use the screen center (reticle) for raycasting
@@ -512,6 +608,8 @@ public class FightController : MonoBehaviour
 
             if (Physics.Raycast(ray, out hit, 2000f))
             {
+                Debug.Log($"FightController: Raycast hit: {hit.transform.name}");
+
                 ModelController clickedModel = hit.transform.GetComponent<ModelController>();
                 if (clickedModel != null)
                 {
@@ -522,14 +620,27 @@ public class FightController : MonoBehaviour
                         if (fight.participants.Any(m => m.playerID == currentPlayerId))
                         {
                             SelectFight(fight);
+                            Debug.Log("FightController: Fight selected and highlighted.");
                         }
                         else
                         {
                             gameController.ShowPlayerErrorMessage("You must select a fight that includes one of your own models.");
-                            Debug.Log("Selected fight does not include any of your models.");
+                            Debug.Log("FightController: Selected fight does not include any of your models.");
                         }
                     }
+                    else
+                    {
+                        Debug.Log("FightController: Clicked model is not part of any active fight.");
+                    }
                 }
+                else
+                {
+                    Debug.Log("FightController: Clicked object does not have a ModelController.");
+                }
+            }
+            else
+            {
+                Debug.Log("FightController: Raycast did not hit any object.");
             }
         }
     }
@@ -542,7 +653,7 @@ public class FightController : MonoBehaviour
         if (Input.GetKeyDown(KeyCode.Escape) && selectedFight != null)
         {
             DeselectCurrentFight();
-            Debug.Log("Fight deselected via Escape key.");
+            Debug.Log("FightController: Fight deselected via Escape key.");
         }
     }
 
@@ -551,6 +662,8 @@ public class FightController : MonoBehaviour
     /// </summary>
     private void SelectFight(Fight fight)
     {
+        Debug.Log("FightController: Selecting a fight.");
+
         if (selectedFight != null)
         {
             DeselectCurrentFight();
@@ -559,7 +672,7 @@ public class FightController : MonoBehaviour
         selectedFight = fight;
         HighlightFightModels(fight);
         fightButton.gameObject.SetActive(true);
-        Debug.Log("Fight selected and highlighted.");
+        Debug.Log("FightController: Fight selected and Fight button displayed.");
     }
 
     /// <summary>
@@ -572,7 +685,7 @@ public class FightController : MonoBehaviour
             UnhighlightFightModels(selectedFight);
             selectedFight = null;
             fightButton.gameObject.SetActive(false);
-            Debug.Log("Fight deselected and highlights removed.");
+            Debug.Log("FightController: Fight deselected and Fight button hidden.");
         }
     }
 
@@ -587,6 +700,11 @@ public class FightController : MonoBehaviour
             if (outline != null)
             {
                 outline.enabled = true;
+                Debug.Log($"FightController: Outline enabled for {model.gameObject.name}.");
+            }
+            else
+            {
+                Debug.LogWarning($"FightController: Model {model.gameObject.name} does not have an Outline component.");
             }
         }
     }
@@ -602,40 +720,12 @@ public class FightController : MonoBehaviour
             if (outline != null)
             {
                 outline.enabled = false;
+                Debug.Log($"FightController: Outline disabled for {model.gameObject.name}.");
             }
-        }
-    }
-
-    /// <summary>
-    /// Ends the Fight phase and notifies the GameController.
-    /// </summary>
-    private void EndFightPhase()
-    {
-        if (fightResolutionCoroutine != null)
-        {
-            StopCoroutine(fightResolutionCoroutine);
-        }
-
-        fightPhaseState = FightPhaseState.None;
-        selectedFight = null;
-        initiativeText.gameObject.SetActive(false); // Hide initiative text
-        gameController.HidePlayerErrorMessage();
-        gameController.NextPhase();
-        Debug.Log("Fight phase ended.");
-    }
-
-    void Update()
-    {
-        if (fightPhaseState == FightPhaseState.SelectingFight)
-        {
-            HandleFightSelection();
-            HandleDeselect();
-        }
-        else if (fightPhaseState == FightPhaseState.None && gameController.GetCurrentPhase() == GameController.Phase.Fight)
-        {
-            // Ensure fightPhaseState is set correctly
-            PromptPlayerToSelectFight();
-            fightPhaseState = FightPhaseState.SelectingFight;
+            else
+            {
+                Debug.LogWarning($"FightController: Model {model.gameObject.name} does not have an Outline component.");
+            }
         }
     }
 }

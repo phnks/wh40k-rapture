@@ -257,6 +257,7 @@ public class GameController : MonoBehaviour
                 else if (currentPhaseLocal == Phase.Fight)
                 {
                     // Fight phase selection handled by FightController
+                    // **No action needed here as inputs are ignored by GameController during Fight phase**
                 }
                 else
                 {
@@ -405,7 +406,7 @@ public class GameController : MonoBehaviour
 
             if (modelCollider == null || targetCollider == null)
             {
-                Debug.LogError("One or both models do not have colliders.");
+                Debug.LogError("FightController: Model or enemy does not have a collider.");
                 return false;
             }
 
@@ -419,7 +420,7 @@ public class GameController : MonoBehaviour
             Bounds simulatedModelBounds = new Bounds(simulatedPosition, modelSize);
 
             bool isColliding = simulatedModelBounds.Intersects(targetBounds);
-            Debug.Log($"Simulated Collision at {targetPosition}: {isColliding}");
+            Debug.Log($"FightController: Simulated Collision at {targetPosition}: {isColliding}");
             return isColliding;
         }
 
@@ -443,16 +444,16 @@ public class GameController : MonoBehaviour
             }
 
             bool isColliding = selectedModel.IsColliding(targetModel);
-            Debug.Log($"Collision Check: {isColliding}");
+            Debug.Log($"FightController: Collision Check: {isColliding}");
 
             if (isColliding)
             {
-                Debug.Log("Charge collision successful.");
+                Debug.Log("FightController: Charge collision successful.");
                 chargeController.CheckChargeCollision();
             }
             else
             {
-                Debug.Log("Charge collision failed.");
+                Debug.Log("FightController: Charge collision failed.");
                 chargeController.CheckChargeCollision();
             }
         }
