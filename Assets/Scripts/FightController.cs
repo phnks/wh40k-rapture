@@ -260,9 +260,12 @@ public class FightController : MonoBehaviour
                         {
                             Debug.Log($"FightController: Model {selectedModelForPileInMove.gameObject.name} selected for pile in move.");
                             yield return StartCoroutine(HandlePileInMove(selectedModelForPileInMove));
-                            usedFighters.Add(selectedModelForPileInMove);
-                            Debug.Log($"FightController: Model {selectedModelForPileInMove.gameObject.name} added to usedFighters.");
-                            selectedModelForPileInMove = null;
+                            if (selectedModelForPileInMove != null) // Ensure it's not null before adding
+                            {
+                                usedFighters.Add(selectedModelForPileInMove);
+                                Debug.Log($"FightController: Model {selectedModelForPileInMove.gameObject.name} added to usedFighters.");
+                                selectedModelForPileInMove = null;
+                            }
 
                             // Switch to the other player
                             currentPlayer = (currentPlayer == 1) ? 2 : 1;
@@ -342,6 +345,10 @@ public class FightController : MonoBehaviour
                     {
                         selectedModelForPileInMove = clickedModel;
                         Debug.Log($"FightController: Model {clickedModel.gameObject.name} selected for pile in move.");
+                        // Show the "Confirm Pile In Move" button immediately after selection
+                        confirmPileInMoveButton.gameObject.SetActive(true);
+                        gameController.ShowPlayerErrorMessage("Click 'Confirm Pile In Move' to finalize your action.");
+                        Debug.Log("FightController: Confirm Pile In Move button displayed.");
                     }
                     else
                     {
@@ -374,7 +381,7 @@ public class FightController : MonoBehaviour
         bool moveValid = false;
         Vector3 targetPosition = Vector3.zero;
 
-        // Wait for player to click on a valid location
+        // Wait for player to click on a valid location or confirm without moving
         while (!moveValid && fightPhaseState == FightPhaseState.PileInMove)
         {
             if (Input.GetMouseButtonDown(0) && !UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject())
@@ -459,11 +466,6 @@ public class FightController : MonoBehaviour
             currentPileInMoveIndicator = null;
         }
 
-        // Show the "Confirm Pile In Move" button
-        confirmPileInMoveButton.gameObject.SetActive(true);
-        gameController.ShowPlayerErrorMessage("Click 'Confirm Pile In Move' to finalize your action.");
-        Debug.Log("FightController: Confirm Pile In Move button displayed.");
-
         // Wait until the player confirms the move
         while (confirmPileInMoveButton.gameObject.activeSelf && fightPhaseState == FightPhaseState.PileInMove)
         {
@@ -484,6 +486,33 @@ public class FightController : MonoBehaviour
         confirmPileInMoveButton.gameObject.SetActive(false);
         gameController.ShowPlayerErrorMessage("Pile in move confirmed.");
         Debug.Log("FightController: Pile in move confirmed.");
+
+        if (selectedModelForPileInMove != null)
+        {
+            // If a pile in move was performed, it has already been handled in HandlePileInMove
+            // So just mark the fighter as used
+            usedFighters.Add(selectedModelForPileInMove);
+            Debug.Log($"FightController: Model {selectedModelForPileInMove.gameObject.name} confirmed without additional move.");
+            selectedModelForPileInMove = null;
+        }
+        else
+        {
+            // If no move was performed, still mark the fighter as used
+            // Find the current player’s available fighter to mark as used
+            ModelController fighterToMark = availableFighters.FirstOrDefault(m => m.playerID == currentPlayer && !usedFighters.Contains(m));
+            if (fighterToMark != null)
+            {
+                usedFighters.Add(fighterToMark);
+                Debug.Log($"FightController: Fighter {fighterToMark.gameObject.name} marked as used without performing pile in move.");
+            }
+            else
+            {
+                Debug.LogWarning("FightController: No available fighter found to mark as used.");
+            }
+        }
+
+        // Proceed to resolve the next fighter
+        fightPhaseState = FightPhaseState.ResolvingInitiativeRound;
     }
 
     /// <summary>
