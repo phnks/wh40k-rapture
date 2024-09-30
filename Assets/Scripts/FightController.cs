@@ -338,6 +338,13 @@ public class FightController : MonoBehaviour
             EndFightPhase();
         }
 
+        // Hide the initiativeText since fight is resolved
+        if (initiativeText != null)
+        {
+            initiativeText.gameObject.SetActive(false);
+            Debug.Log("FightController: Initiative text hidden after fight resolution.");
+        }
+
         yield break;
     }
 
@@ -461,6 +468,9 @@ public class FightController : MonoBehaviour
                                 moveValid = true;
                                 gameController.ShowPlayerErrorMessage("Pile in move successful.");
                                 Debug.Log($"FightController: Pile in move successful. Model {model.gameObject.name} moved to {targetPosition}.");
+
+                                // Notify GameController that the model has moved
+                                // This may be necessary depending on how GameController handles model states
                             }
                             else
                             {
