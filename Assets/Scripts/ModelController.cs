@@ -2,6 +2,7 @@
 using UnityEngine;
 using UnityEngine.AI;
 using System.Collections.Generic;
+using System.Linq; // Add this line
 
 [RequireComponent(typeof(Outline))]
 public class ModelController : MonoBehaviour
@@ -13,59 +14,68 @@ public class ModelController : MonoBehaviour
     }
 
     [Header("Model Attributes")]
-    public int playerID; // ID of the player who owns this model (1 or 2)
-    public float movementRange = 6f; // Maximum distance the model can move in a turn
-    public int initiative = 3; // Initiative attribute (1 to 10)
-    public Faction faction; // Faction of the model
+    public int playerID;
+    public float movementRange = 6f;
+    public int initiative = 3;
+    public Faction faction;
 
     [Header("Shooting Attributes")]
-    public int ballisticSkill; // Ballistic Skill for shooting (1 to 6)
-    public int toughness; // Toughness of the model
-    public int armourSave; // Armour save value
-    public int invulnerabilitySave; // Invulnerability save value
-    public int wounds; // Current wounds of the model
+    public int ballisticSkill;
+    public int toughness;
+    public int armourSave;
+    public int invulnerabilitySave;
+    public int wounds;
 
-    private float initialMovement; // Initial movement value
-    private float initialMarchMovement; // Initial march movement value
-    private float remainingMovement; // Remaining movement allowed in the current phase
-    private float remainingMarchMovement; // Remaining march movement allowed
-    private Vector3 startPosition; // Original position at the start of the phase
+    // New attributes
+    [Header("Melee Attributes")]
+    public int weaponSkill; // New attribute
+    public int strength;    // New attribute
+    public int attacks;     // New attribute
+    private int remainingAttacks; // Remaining attacks during Fight phase
+    private bool hasFought = false; // Indicates if the model has fought this Fight phase
+
+    private float initialMovement;
+    private float initialMarchMovement;
+    private float remainingMovement;
+    private float remainingMarchMovement;
+    private Vector3 startPosition;
 
     private bool isSelected = false;
-    private bool hasMoved = false; // Tracks if the model has moved during the Movement phase
-    private bool hasMarched = false; // Tracks if the model has marched during the Movement phase
-    private bool hasCharged = false; // Tracks if the model has charged this round
+    private bool hasMoved = false;
+    private bool hasMarched = false;
+    private bool hasCharged = false;
 
-    private NavMeshAgent agent; // Reference to the NavMeshAgent component
-    private Outline outline; // Reference to the Outline component
-    private GameObject rangeIndicator; // Movement range indicator
-    private GameObject marchRangeIndicator; // March range indicator
-    private GameObject chargeRangeIndicator; // Charge range indicator
-    private GameObject moveIndicator; // Indicator for original position after the first move
+    private NavMeshAgent agent;
+    private Outline outline;
+    private GameObject rangeIndicator;
+    private GameObject marchRangeIndicator;
+    private GameObject chargeRangeIndicator;
+    private GameObject moveIndicator;
 
-    private List<WeaponController> weapons = new List<WeaponController>(); // Weapons the model possesses
+    private List<WeaponController> weapons = new List<WeaponController>();
 
-    public const float ROTATION_SPEED = 6400f; // Rotation speed constant
+    public const float ROTATION_SPEED = 6400f;
 
-    private const float MOVE_SPEED = 10000f; // Movement speed constant
+    private const float MOVE_SPEED = 10000f;
 
     void Start()
     {
         outline = GetComponent<Outline>();
-        outline.enabled = false; // Disable outline by default
+        outline.enabled = false;
 
-        // Initialize movement
-        initialMovement = movementRange * GameConstants.MOVEMENT_CONVERSION_FACTOR; // Store initial movement
-        remainingMovement = initialMovement; // Initialize remaining movement
-        initialMarchMovement = (movementRange + initiative) * GameConstants.MOVEMENT_CONVERSION_FACTOR; // Store initial march movement
-        remainingMarchMovement = initialMarchMovement; // Initialize remaining march movement
+        initialMovement = movementRange * GameConstants.MOVEMENT_CONVERSION_FACTOR;
+        remainingMovement = initialMovement;
+        initialMarchMovement = (movementRange + initiative) * GameConstants.MOVEMENT_CONVERSION_FACTOR;
+        remainingMarchMovement = initialMarchMovement;
 
-        startPosition = transform.position; // Store starting position at the start of the phase
+        startPosition = transform.position;
 
-        UpdateColors(); // Set initial colors based on faction
+        UpdateColors();
         InitializeMovementIndicators();
-        HideMovementRange(); // Ensure indicators are hidden initially
+        HideMovementRange();
 
+        // Initialize weapons
+        weapons.AddRange(GetComponentsInChildren<WeaponController>());
         Debug.Log($"Model {gameObject.name} initialized with Movement: {movementRange}, Initiative: {initiative}");
     }
 
@@ -102,7 +112,6 @@ public class ModelController : MonoBehaviour
     /// </summary>
     void OnDestroy()
     {
-        // Notify GameController to remove this model from the lists
         if (GameController.Instance != null)
         {
             GameController.Instance.RemoveModel(this);
@@ -617,6 +626,42 @@ public class ModelController : MonoBehaviour
         bool isIntersecting = colliderA.bounds.Intersects(colliderB.bounds);
         Debug.Log($"IsColliding between {this.gameObject.name} and {otherModel.gameObject.name}: {isIntersecting}");
         return isIntersecting;
+    }
+    
+        public List<WeaponController> GetMeleeWeapons()
+    {
+        return weapons.Where(w => w.range == 0).ToList();
+    }
+
+    public void SetRemainingAttacks(int attacks)
+    {
+        remainingAttacks = attacks;
+    }
+
+    public int GetRemainingAttacks()
+    {
+        return remainingAttacks;
+    }
+
+    public void DecrementRemainingAttacks()
+    {
+        remainingAttacks--;
+    }
+
+    public bool HasFought()
+    {
+        return hasFought;
+    }
+
+    public void SetHasFought(bool hasFought)
+    {
+        this.hasFought = hasFought;
+    }
+
+    // Reset methods
+    public void ResetFightPhaseStatus()
+    {
+        hasFought = false;
     }
 }
 

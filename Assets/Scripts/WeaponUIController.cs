@@ -1,3 +1,4 @@
+// WeaponUIController.cs
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
@@ -5,40 +6,53 @@ using System.Collections.Generic;
 
 public class WeaponUIController : MonoBehaviour
 {
-    public GameObject weaponButtonPrefab; // Prefab for the weapon button
-    public Transform weaponButtonContainer; // Container to hold weapon buttons
-    public GameObject weaponUIPanel; // Reference to the actual UI Panel (Canvas or Panel containing the buttons)
+    public GameObject weaponButtonPrefab;
+    public Transform weaponButtonContainer;
+    public GameObject weaponUIPanel;
+    public TextMeshProUGUI remainingAttacksText; // Reference to display remaining attacks
+
+    public WeaponController selectedWeapon;
 
     private List<Button> weaponButtons = new List<Button>();
 
-    // Initialize the UI Controller
     public void Initialize()
     {
-        HideWeaponUI(); // Hide UI on initialization
+        HideWeaponUI();
     }
 
-    // Show weapon options for the selected model
     public void ShowWeaponOptions(ModelController model)
     {
-        ClearWeaponButtons(); // Clear all existing buttons
+        ClearWeaponButtons();
         foreach (WeaponController weapon in model.GetComponentsInChildren<WeaponController>())
         {
-            if (weapon.range > 0) // Skip weapons with 0 range
+            if (weapon.range > 0)
             {
                 CreateWeaponButton(weapon, model);
             }
         }
-        weaponUIPanel.SetActive(true); // Show the weapon UI panel
+        weaponUIPanel.SetActive(true);
     }
 
-    // Hide the weapon UI
+    // New method for melee weapons
+    public void ShowMeleeWeaponOptions(ModelController model)
+    {
+        ClearWeaponButtons();
+        foreach (WeaponController weapon in model.GetComponentsInChildren<WeaponController>())
+        {
+            if (weapon.range == 0)
+            {
+                CreateWeaponButton(weapon, model);
+            }
+        }
+        weaponUIPanel.SetActive(true);
+    }
+
     public void HideWeaponUI()
     {
-        weaponUIPanel.SetActive(false); // Hide the actual UI panel
-        ClearWeaponButtons(); // Clear any existing weapon buttons
+        weaponUIPanel.SetActive(false);
+        ClearWeaponButtons();
     }
 
-    // Create a button for each weapon
     private void CreateWeaponButton(WeaponController weapon, ModelController model)
     {
         if (weaponButtonPrefab == null)
@@ -52,7 +66,6 @@ public class WeaponUIController : MonoBehaviour
         TextMeshProUGUI buttonText = buttonObject.GetComponentInChildren<TextMeshProUGUI>();
         buttonText.text = weapon.weaponName;
 
-        // Disable the button if the weapon has been used
         bool isUsed = ShootingController.Instance.IsWeaponUsed(weapon);
         button.interactable = !isUsed;
 
@@ -60,7 +73,6 @@ public class WeaponUIController : MonoBehaviour
         weaponButtons.Add(button);
     }
 
-    // Clear all existing weapon buttons
     private void ClearWeaponButtons()
     {
         foreach (Transform child in weaponButtonContainer)
@@ -68,12 +80,14 @@ public class WeaponUIController : MonoBehaviour
             Destroy(child.gameObject);
         }
         weaponButtons.Clear();
+        selectedWeapon = null;
     }
 
-    // Handle weapon button click
     private void OnWeaponButtonClicked(WeaponController weapon, ModelController model)
     {
-        ShootingController.Instance.SelectWeaponForShooting(model, weapon); // Trigger shooting logic
+        selectedWeapon = weapon;
+        ShootingController.Instance.SelectWeaponForShooting(model, weapon); // For melee attacks, reusing this method
+        Debug.Log($"Weapon {weapon.weaponName} selected for attacks.");
     }
 }
 

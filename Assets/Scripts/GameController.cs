@@ -49,7 +49,7 @@ public class GameController : MonoBehaviour
     private List<GameObject> player2Models = new List<GameObject>();  // List of Player 2's models
 
     private ModelController selectedModel; // Reference to the currently selected model
-    private ShootingController shootingController; // Reference to the Shooting Controller
+    public ShootingController shootingController; // Made public
 
     private const float RAYCAST_RANGE = 2000f; // Increased raycast range for selection
 
@@ -667,22 +667,22 @@ public class GameController : MonoBehaviour
         /// <summary>
         /// Ends the current round, resets states, and prepares for the next round.
         /// </summary>
-        public void EndRound()
-        {
-            currentRound++;
-            currentPhase = Phase.Movement;
+public void EndRound()
+{
+    currentRound++;
+    currentPhase = Phase.Movement;
 
-            Debug.Log($"Ending Round {currentRound - 1}. Starting Round {currentRound}.");
+    Debug.Log($"Ending Round {currentRound - 1}. Starting Round {currentRound}.");
 
-            // Reset used weapons
-            shootingController.ResetUsedWeapons();
+    // Reset used weapons
+    shootingController.ResetUsedWeapons();
 
-            // Reset each model's movement, march, and charge status
-            ResetAllModels();
+    // Reset each model's movement, march, charge, and fight status
+    ResetAllModels();
 
-            SetCurrentPlayer(1); // Ensure the new round starts with Player 1
-            UpdateUI();
-        }
+    SetCurrentPlayer(1);
+    UpdateUI();
+}
 
         /// <summary>
         /// Returns the current player ID.
@@ -782,47 +782,34 @@ public class GameController : MonoBehaviour
         /// </summary>
         private void ResetAllModels()
         {
-            // Iterate through player1Models list in reverse to safely remove null references
-            for (int i = player1Models.Count - 1; i >= 0; i--)
-            {
-                GameObject modelObj = player1Models[i];
-                if (modelObj == null)
-                {
-                    player1Models.RemoveAt(i); // Remove null references
-                    continue;
-                }
+    // Add reset for hasFought
+    foreach (GameObject modelObj in player1Models)
+    {
+        ModelController model = modelObj.GetComponent<ModelController>();
+        if (model != null)
+        {
+            model.ResetMovement();
+            model.ResetMarch();
+            model.ResetCharge();
+            model.ResetFightPhaseStatus(); // Reset hasFought
+            model.UpdateStartPosition();
+            Debug.Log($"Model {model.gameObject.name} reset for new round.");
+        }
+    }
 
-                ModelController model = modelObj.GetComponent<ModelController>();
-                if (model != null)
-                {
-                    model.ResetMovement(); // Reset movement and hasMoved
-                    model.ResetMarch(); // Reset hasMarched
-                    model.ResetCharge(); // Reset hasCharged
-                    model.UpdateStartPosition(); // Update start position to current position
-                    Debug.Log($"Model {model.gameObject.name} reset for new round.");
-                }
-            }
-
-            // Iterate through player2Models list in reverse to safely remove null references
-            for (int i = player2Models.Count - 1; i >= 0; i--)
-            {
-                GameObject modelObj = player2Models[i];
-                if (modelObj == null)
-                {
-                    player2Models.RemoveAt(i); // Remove null references
-                    continue;
-                }
-
-                ModelController model = modelObj.GetComponent<ModelController>();
-                if (model != null)
-                {
-                    model.ResetMovement(); // Reset movement and hasMoved
-                    model.ResetMarch(); // Reset hasMarched
-                    model.ResetCharge(); // Reset hasCharged
-                    model.UpdateStartPosition(); // Update start position to current position
-                    Debug.Log($"Model {model.gameObject.name} reset for new round.");
-                }
-            }
+    foreach (GameObject modelObj in player2Models)
+    {
+        ModelController model = modelObj.GetComponent<ModelController>();
+        if (model != null)
+        {
+            model.ResetMovement();
+            model.ResetMarch();
+            model.ResetCharge();
+            model.ResetFightPhaseStatus(); // Reset hasFought
+            model.UpdateStartPosition();
+            Debug.Log($"Model {model.gameObject.name} reset for new round.");
+        }
+    }
 
             // Reset ChargeController if needed
             if (chargeController != null)

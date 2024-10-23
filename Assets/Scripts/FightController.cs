@@ -11,12 +11,13 @@ public class FightController : MonoBehaviour
     public static FightController Instance;
 
     [Header("UI Elements")]
-    public Button fightButton; // Assign the "Fight" button in the Inspector
-    public Button confirmPileInMoveButton; // Assign the "Confirm Pile In Move" button in the Inspector
-    public TextMeshProUGUI initiativeText; // Assign the Initiative Round Text UI element
+    public Button fightButton;
+    public Button confirmPileInMoveButton;
+    public TextMeshProUGUI initiativeText;
+    public TextMeshProUGUI remainingAttacksText; // Text to display remaining attacks
 
     [Header("Pile In Move")]
-    public GameObject pileInMoveRangeIndicatorPrefab; // Assign the Pile In Move Range Indicator Prefab
+    public GameObject pileInMoveRangeIndicatorPrefab;
 
     private GameController gameController;
     private List<Fight> activeFights = new List<Fight>();
@@ -28,7 +29,7 @@ public class FightController : MonoBehaviour
     private HashSet<ModelController> availableFighters;
     private HashSet<ModelController> usedFighters;
 
-    private int currentPlayer; // Managed independently within FightController
+    private int currentPlayer;
 
     private bool isResolvingFight = false;
     private ModelController selectedModelForPileInMove = null;
@@ -36,13 +37,14 @@ public class FightController : MonoBehaviour
 
     private Coroutine fightResolutionCoroutine;
 
-    // Enum to manage fight phase states
+    // Added new FightPhaseState
     private enum FightPhaseState
     {
         None,
         SelectingFight,
         ResolvingInitiativeRound,
-        PileInMove
+        PileInMove,
+        Attacks // New state
     }
 
     private FightPhaseState fightPhaseState = FightPhaseState.None;
@@ -57,6 +59,23 @@ public class FightController : MonoBehaviour
             participants = new HashSet<ModelController>();
         }
     }
+
+    // Data structure to store attacks
+    private class AttackAction
+    {
+        public ModelController attacker;
+        public ModelController target;
+        public WeaponController weapon;
+
+        public AttackAction(ModelController attacker, ModelController target, WeaponController weapon)
+        {
+            this.attacker = attacker;
+            this.target = target;
+            this.weapon = weapon;
+        }
+    }
+
+    private List<AttackAction> attackActions = new List<AttackAction>(); // List to store all attacks
 
     void Awake()
     {
@@ -73,9 +92,9 @@ public class FightController : MonoBehaviour
 
         if (fightButton != null)
         {
-            fightButton.onClick.RemoveAllListeners(); // Remove any existing listeners
+            fightButton.onClick.RemoveAllListeners();
             fightButton.onClick.AddListener(StartFightResolution);
-            fightButton.gameObject.SetActive(false); // Hide initially
+            fightButton.gameObject.SetActive(false);
             Debug.Log("Fight button listeners set and button hidden initially.");
         }
         else
@@ -87,7 +106,7 @@ public class FightController : MonoBehaviour
         {
             confirmPileInMoveButton.onClick.RemoveAllListeners();
             confirmPileInMoveButton.onClick.AddListener(ConfirmPileInMove);
-            confirmPileInMoveButton.gameObject.SetActive(false); // Hide initially
+            confirmPileInMoveButton.gameObject.SetActive(false);
             Debug.Log("Confirm Pile In Move button listeners set and button hidden initially.");
         }
         else
@@ -97,7 +116,7 @@ public class FightController : MonoBehaviour
 
         if (initiativeText != null)
         {
-            initiativeText.gameObject.SetActive(false); // Hide initiative text initially
+            initiativeText.gameObject.SetActive(false);
             Debug.Log("Initiative text hidden initially.");
         }
         else
@@ -112,6 +131,16 @@ public class FightController : MonoBehaviour
         else
         {
             Debug.Log("Pile In Move Range Indicator Prefab assigned.");
+        }
+
+        if (remainingAttacksText != null)
+        {
+            remainingAttacksText.gameObject.SetActive(false);
+            Debug.Log("Remaining attacks text hidden initially.");
+        }
+        else
+        {
+            Debug.LogError("RemainingAttacksText is not assigned in the Inspector!");
         }
     }
 
@@ -135,18 +164,19 @@ public class FightController : MonoBehaviour
             HandleFightSelection();
             HandleDeselect();
         }
+        else if (fightPhaseState == FightPhaseState.Attacks)
+        {
+            HandleAttackSelection();
+            HandleDeselect();
+        }
         else if (fightPhaseState == FightPhaseState.None && gameController.GetCurrentPhase() == GameController.Phase.Fight)
         {
-            // Ensure fightPhaseState is set correctly
             PromptPlayerToSelectFight();
             fightPhaseState = FightPhaseState.SelectingFight;
             Debug.Log("FightController: FightPhaseState set to SelectingFight.");
         }
     }
 
-    /// <summary>
-    /// Call this method to start the Fight phase from GameController.
-    /// </summary>
     public void StartFightPhase()
     {
         Debug.Log("FightController: StartFightPhase called.");
@@ -162,9 +192,6 @@ public class FightController : MonoBehaviour
         PromptPlayerToSelectFight();
     }
 
-    /// <summary>
-    /// Call this method to start the Fight resolution process when the Fight button is clicked.
-    /// </summary>
     private void StartFightResolution()
     {
         Debug.Log("FightController: StartFightResolution called.");
@@ -175,18 +202,15 @@ public class FightController : MonoBehaviour
             return;
         }
 
-        // Deselect all models in the fight
         foreach (var model in selectedFight.participants)
         {
             model.DeselectModel();
             Debug.Log($"FightController: Model {model.gameObject.name} deselected.");
         }
 
-        // Hide the Fight button
         fightButton.gameObject.SetActive(false);
         Debug.Log("FightController: Fight button hidden.");
 
-        // Reset starting positions for all models in the fight
         foreach (var model in selectedFight.participants)
         {
             model.UpdateStartPosition();
@@ -197,15 +221,12 @@ public class FightController : MonoBehaviour
         currentInitiativeRound = maxInitiativeRound;
         fightPhaseState = FightPhaseState.ResolvingInitiativeRound;
         UpdateInitiativeUI();
-        initiativeText.gameObject.SetActive(true); // Show initiative text
+        initiativeText.gameObject.SetActive(true);
         gameController.ShowPlayerErrorMessage($"Fight resolution started. Initiating at Round {currentInitiativeRound}.");
         Debug.Log($"FightController: Fight resolution started at Round {currentInitiativeRound}.");
         fightResolutionCoroutine = StartCoroutine(FightResolutionCoroutine());
     }
 
-    /// <summary>
-    /// Coroutine to handle the fight resolution steps.
-    /// </summary>
     private IEnumerator FightResolutionCoroutine()
     {
         Debug.Log("FightController: FightResolutionCoroutine started.");
@@ -222,7 +243,7 @@ public class FightController : MonoBehaviour
                 {
                     effectiveInitiative += 1;
                 }
-                if (effectiveInitiative == currentInitiativeRound)
+                if (effectiveInitiative == currentInitiativeRound && !model.HasFought())
                 {
                     availableFighters.Add(model);
                 }
@@ -233,13 +254,12 @@ public class FightController : MonoBehaviour
                 Debug.Log($"FightController: Available fighters in Initiative Round {currentInitiativeRound}: {availableFighters.Count}");
                 usedFighters = new HashSet<ModelController>();
 
-                // Initialize currentPlayer to Player 1 at the start of the initiative round
                 currentPlayer = 1;
                 Debug.Log($"FightController: Starting Initiative Round {currentInitiativeRound} with Player {currentPlayer}.");
 
                 bool fightersLeft = true;
                 int playersChecked = 0;
-                int totalPlayers = 2; // Assuming two players; adjust if more players are involved
+                int totalPlayers = 2;
 
                 while (fightersLeft && playersChecked < totalPlayers)
                 {
@@ -249,47 +269,46 @@ public class FightController : MonoBehaviour
 
                     if (fightersForCurrentPlayer.Count > 0)
                     {
-                        // Prompt currentPlayer to select a model
-                        gameController.ShowPlayerErrorMessage($"Player {currentPlayer}, select a model to perform a pile in move.");
-                        Debug.Log($"FightController: Prompting Player {currentPlayer} to select a model for pile in move.");
-                        fightPhaseState = FightPhaseState.PileInMove;
-
-                        yield return StartCoroutine(WaitForModelSelection());
-
-                        if (selectedModelForPileInMove != null)
+                        // Start Attacks phase
+                        fightPhaseState = FightPhaseState.Attacks;
+                        foreach (var fighter in fightersForCurrentPlayer)
                         {
-                            Debug.Log($"FightController: Model {selectedModelForPileInMove.gameObject.name} selected for pile in move.");
-                            yield return StartCoroutine(HandlePileInMove(selectedModelForPileInMove));
-                            if (selectedModelForPileInMove != null) // Ensure it's not null before adding
+                            if (fighter.HasFought())
                             {
-                                usedFighters.Add(selectedModelForPileInMove);
-                                Debug.Log($"FightController: Model {selectedModelForPileInMove.gameObject.name} added to usedFighters.");
-                                selectedModelForPileInMove = null;
+                                usedFighters.Add(fighter);
+                                continue;
                             }
 
-                            // Switch to the other player
-                            currentPlayer = (currentPlayer == 1) ? 2 : 1;
-                            Debug.Log($"FightController: Switched to Player {currentPlayer}.");
-                        }
-                        else
-                        {
-                            // If no model was selected, skip to next player
-                            Debug.Log($"FightController: No model selected by Player {currentPlayer}.");
-                            currentPlayer = (currentPlayer == 1) ? 2 : 1;
-                            Debug.Log($"FightController: Switched to Player {currentPlayer}.");
+                            gameController.ShowPlayerErrorMessage($"Player {currentPlayer}, select a model to fight.");
+                            Debug.Log($"FightController: Prompting Player {currentPlayer} to select a model to fight.");
+
+                            yield return StartCoroutine(WaitForModelSelectionForAttack(currentPlayer));
+
+                            if (selectedModelForPileInMove != null)
+                            {
+                                Debug.Log($"FightController: Model {selectedModelForPileInMove.gameObject.name} selected for attacks.");
+                                yield return StartCoroutine(HandleAttacks(selectedModelForPileInMove));
+                                usedFighters.Add(selectedModelForPileInMove);
+                                selectedModelForPileInMove = null;
+
+                                currentPlayer = (currentPlayer == 1) ? 2 : 1;
+                                Debug.Log($"FightController: Switched to Player {currentPlayer}.");
+                            }
+                            else
+                            {
+                                currentPlayer = (currentPlayer == 1) ? 2 : 1;
+                                Debug.Log($"FightController: Switched to Player {currentPlayer}.");
+                            }
                         }
                     }
                     else
                     {
                         Debug.Log($"FightController: Player {currentPlayer} has no available fighters.");
-                        // Switch to the other player
                         currentPlayer = (currentPlayer == 1) ? 2 : 1;
                         Debug.Log($"FightController: Switched to Player {currentPlayer}.");
-
                         playersChecked++;
                     }
 
-                    // Check if the next player has available fighters
                     var fightersForNextPlayer = availableFighters
                         .Where(m => m.playerID == currentPlayer && !usedFighters.Contains(m))
                         .ToList();
@@ -300,12 +319,15 @@ public class FightController : MonoBehaviour
                     }
                     else
                     {
-                        playersChecked = 0; // Reset if a player has fighters
+                        playersChecked = 0;
                     }
 
-                    // Determine if there are fighters left
                     fightersLeft = availableFighters.Any(m => !usedFighters.Contains(m));
                 }
+
+                // Resolve attacks after all models have fought
+                ResolveAttacks();
+                attackActions.Clear(); // Clear attacks for the next round
             }
 
             currentInitiativeRound--;
@@ -314,22 +336,19 @@ public class FightController : MonoBehaviour
             yield return null;
         }
 
-        // After all initiative rounds are resolved, mark fight as resolved
+        // After all initiative rounds are resolved
         Debug.Log("FightController: All initiative rounds resolved for this fight.");
         gameController.ShowPlayerErrorMessage("Fight resolved.");
         Debug.Log("FightController: Fight resolved.");
 
-        // Remove the resolved fight from activeFights
         activeFights.Remove(selectedFight);
         Debug.Log($"FightController: Fight removed from activeFights. Remaining fights: {activeFights.Count}.");
 
-        // Check if there are more fights to resolve
         if (activeFights.Count > 0)
         {
             Debug.Log("FightController: More fights remain to be resolved.");
             fightPhaseState = FightPhaseState.SelectingFight;
             gameController.ShowPlayerErrorMessage("Select the next fight to resolve.");
-            // Reset selectedFight to allow selection of another fight
             selectedFight = null;
         }
         else
@@ -338,7 +357,6 @@ public class FightController : MonoBehaviour
             EndFightPhase();
         }
 
-        // Hide the initiativeText since fight is resolved
         if (initiativeText != null)
         {
             initiativeText.gameObject.SetActive(false);
@@ -346,6 +364,231 @@ public class FightController : MonoBehaviour
         }
 
         yield break;
+    }
+
+    private IEnumerator WaitForModelSelectionForAttack(int playerID)
+    {
+        selectedModelForPileInMove = null;
+        Debug.Log("FightController: Waiting for model selection for attack.");
+
+        while (selectedModelForPileInMove == null && fightPhaseState == FightPhaseState.Attacks)
+        {
+            if (Input.GetMouseButtonDown(0) && !UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject())
+            {
+                Vector3 screenCenter = new Vector3(Screen.width / 2, Screen.height / 2, 0);
+                Ray ray = Camera.main.ScreenPointToRay(screenCenter);
+                RaycastHit hit;
+
+                if (Physics.Raycast(ray, out hit, 2000f))
+                {
+                    Debug.Log($"FightController: Raycast hit: {hit.transform.name}");
+
+                    ModelController clickedModel = hit.transform.GetComponent<ModelController>();
+                    if (clickedModel != null && availableFighters.Contains(clickedModel) && clickedModel.playerID == playerID && !clickedModel.HasFought())
+                    {
+                        selectedModelForPileInMove = clickedModel;
+                        Debug.Log($"FightController: Model {clickedModel.gameObject.name} selected for attacks.");
+
+                        gameController.SelectModel(clickedModel);
+
+                        // Calculate remaining attacks
+                        int remainingAttacks = clickedModel.attacks;
+                        if (clickedModel.HasCharged())
+                        {
+                            remainingAttacks += 1;
+                        }
+                        int meleeWeapons = clickedModel.GetMeleeWeapons().Count;
+                        if (meleeWeapons >= 2)
+                        {
+                            remainingAttacks += 1;
+                        }
+                        clickedModel.SetRemainingAttacks(remainingAttacks);
+
+                        // Show remaining attacks
+                        UpdateRemainingAttacksUI(remainingAttacks);
+
+                        // Show melee weapons UI
+                        gameController.weaponUIController.ShowMeleeWeaponOptions(clickedModel);
+
+                        break; // Exit the loop
+                    }
+                    else
+                    {
+                        gameController.ShowPlayerErrorMessage("Select one of your available fighters to attack.");
+                        Debug.Log("FightController: Invalid model selected for attack.");
+                    }
+                }
+            }
+            yield return null;
+        }
+    }
+
+    private IEnumerator HandleAttacks(ModelController model)
+    {
+        Debug.Log($"FightController: HandleAttacks started for model {model.gameObject.name}.");
+
+        while (model.GetRemainingAttacks() > 0)
+        {
+            gameController.ShowPlayerErrorMessage($"Player {currentPlayer}, select a target for {model.gameObject.name}. Remaining Attacks: {model.GetRemainingAttacks()}");
+
+            bool targetSelected = false;
+
+            while (!targetSelected)
+            {
+                if (Input.GetMouseButtonDown(0) && !UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject())
+                {
+                    Vector3 screenCenter = new Vector3(Screen.width / 2, Screen.height / 2, 0);
+                    Ray ray = Camera.main.ScreenPointToRay(screenCenter);
+                    RaycastHit hit;
+
+                    if (Physics.Raycast(ray, out hit, 2000f))
+                    {
+                        ModelController targetModel = hit.transform.GetComponent<ModelController>();
+                        if (targetModel != null && targetModel.playerID != currentPlayer)
+                        {
+                            if (model.IsColliding(targetModel))
+                            {
+                                if (gameController.weaponUIController.selectedWeapon != null)
+                                {
+                                    // Record the attack
+                                    WeaponController weapon = gameController.weaponUIController.selectedWeapon;
+                                    attackActions.Add(new AttackAction(model, targetModel, weapon));
+                                    Debug.Log($"Attack recorded: {model.gameObject.name} attacks {targetModel.gameObject.name} with {weapon.weaponName}.");
+
+                                    model.DecrementRemainingAttacks();
+                                    UpdateRemainingAttacksUI(model.GetRemainingAttacks());
+
+                                    if (model.GetRemainingAttacks() == 0)
+                                    {
+                                        // Mark weapons as used
+                                        foreach (var meleeWeapon in model.GetMeleeWeapons())
+                                        {
+                                            gameController.shootingController.MarkWeaponAsUsed(meleeWeapon);
+                                        }
+
+                                        // Deselect model and hide UI
+                                        gameController.DeselectAllModels();
+                                        model.SetHasFought(true);
+                                        remainingAttacksText.gameObject.SetActive(false);
+                                        Debug.Log($"Model {model.gameObject.name} has finished attacking.");
+                                        yield break;
+                                    }
+
+                                    targetSelected = true;
+                                    break;
+                                }
+                                else
+                                {
+                                    gameController.ShowPlayerErrorMessage("Select a melee weapon to attack with.");
+                                    Debug.Log("No melee weapon selected.");
+                                    break;
+                                }
+                            }
+                            else
+                            {
+                                gameController.ShowPlayerErrorMessage("Target is not in base contact.");
+                                Debug.Log("Target is not colliding with attacker.");
+                            }
+                        }
+                        else
+                        {
+                            gameController.ShowPlayerErrorMessage("Select a valid enemy target.");
+                            Debug.Log("Invalid target selected.");
+                        }
+                    }
+                }
+                yield return null;
+            }
+        }
+    }
+
+    private void ResolveAttacks()
+    {
+        Debug.Log("Resolving attacks:");
+        foreach (var attack in attackActions)
+        {
+            Debug.Log($"{attack.attacker.gameObject.name} attacks {attack.target.gameObject.name} with {attack.weapon.weaponName}");
+
+            // Roll to hit
+            int successfulHits = 0;
+            for (int i = 0; i < attack.weapon.numberOfShots; i++)
+            {
+                int roll = DiceRoller.RollD6();
+                Debug.Log($"Rolling to hit: {roll}");
+                if (roll >= attack.attacker.weaponSkill)
+                {
+                    successfulHits++;
+                }
+            }
+
+            if (successfulHits == 0)
+            {
+                Debug.Log("All attacks missed.");
+                continue;
+            }
+
+            // Roll to wound
+            int successfulWounds = 0;
+            for (int i = 0; i < successfulHits; i++)
+            {
+                int roll = DiceRoller.RollD6();
+                Debug.Log($"Rolling to wound: {roll}");
+                if (IsWoundSuccessful(roll, attack.attacker.strength, attack.target.toughness))
+                {
+                    successfulWounds++;
+                }
+            }
+
+            if (successfulWounds == 0)
+            {
+                Debug.Log("No wounds inflicted.");
+                continue;
+            }
+
+            // Roll for armor save
+            int damageInflicted = 0;
+            for (int i = 0; i < successfulWounds; i++)
+            {
+                int roll = DiceRoller.RollD6();
+                int saveRollRequired = Mathf.Min(attack.target.armourSave - attack.weapon.armourPiercing, attack.target.invulnerabilitySave);
+                Debug.Log($"Rolling for armor save: {roll}, required: {saveRollRequired}");
+                if (roll < saveRollRequired)
+                {
+                    damageInflicted += attack.weapon.damage;
+                }
+            }
+
+            // Apply damage
+            if (damageInflicted > 0)
+            {
+                Debug.Log($"{attack.target.gameObject.name} takes {damageInflicted} damage!");
+                attack.target.TakeDamage(damageInflicted);
+            }
+            else
+            {
+                Debug.Log("All wounds were saved!");
+            }
+        }
+    }
+
+    private bool IsWoundSuccessful(int roll, int attackerStrength, int targetToughness)
+    {
+        if (attackerStrength >= 2 * targetToughness) return roll >= 2;
+        if (attackerStrength > targetToughness) return roll >= 3;
+        if (attackerStrength == targetToughness) return roll >= 4;
+        if (attackerStrength < targetToughness) return roll >= 5;
+        if (attackerStrength * 2 <= targetToughness) return roll >= 6;
+        return false;
+    }
+
+    private void UpdateRemainingAttacksUI(int remainingAttacks)
+    {
+        if (remainingAttacksText != null)
+        {
+            remainingAttacksText.text = "Remaining Attacks: " + remainingAttacks;
+            remainingAttacksText.gameObject.SetActive(true);
+            Debug.Log($"Remaining Attacks UI updated: {remainingAttacks}");
+        }
     }
 
     /// <summary>
@@ -834,5 +1077,14 @@ public class FightController : MonoBehaviour
             }
         }
     }
+    
+        /// <summary>
+    /// Added empty HandleAttackSelection method to avoid errors.
+    /// </summary>
+    private void HandleAttackSelection()
+    {
+        // Input handling during Attacks phase is managed in the coroutines
+        // This method can be used if additional input handling is needed
+    }					
 }
 

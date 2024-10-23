@@ -210,5 +210,14 @@ public class ShootingController : MonoBehaviour
     {
         usedWeapons.Clear();
     }
+    
+    public void MarkWeaponAsUsed(WeaponController weapon)
+{
+    if (!usedWeapons.Contains(weapon))
+    {
+        usedWeapons.Add(weapon);
+        Debug.Log($"Weapon {weapon.weaponName} marked as used.");
+    }
+}
 }
 
