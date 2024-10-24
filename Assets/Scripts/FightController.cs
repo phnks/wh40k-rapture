@@ -37,19 +37,17 @@ public class FightController : MonoBehaviour
 
     private Coroutine fightResolutionCoroutine;
 
-    // Added new FightPhaseState
     private enum FightPhaseState
     {
         None,
         SelectingFight,
         ResolvingInitiativeRound,
         PileInMove,
-        Attacks // New state
+        Attacks
     }
 
     private FightPhaseState fightPhaseState = FightPhaseState.None;
 
-    // Represents a fight containing participating models
     private class Fight
     {
         public HashSet<ModelController> participants;
@@ -60,7 +58,6 @@ public class FightController : MonoBehaviour
         }
     }
 
-    // Data structure to store attacks
     private class AttackAction
     {
         public ModelController attacker;
@@ -75,7 +72,7 @@ public class FightController : MonoBehaviour
         }
     }
 
-    private List<AttackAction> attackActions = new List<AttackAction>(); // List to store all attacks
+    private List<AttackAction> attackActions = new List<AttackAction>();
 
     void Awake()
     {
@@ -162,11 +159,6 @@ public class FightController : MonoBehaviour
         if (fightPhaseState == FightPhaseState.SelectingFight)
         {
             HandleFightSelection();
-            HandleDeselect();
-        }
-        else if (fightPhaseState == FightPhaseState.Attacks)
-        {
-            HandleAttackSelection();
             HandleDeselect();
         }
         else if (fightPhaseState == FightPhaseState.None && gameController.GetCurrentPhase() == GameController.Phase.Fight)
@@ -261,6 +253,9 @@ public class FightController : MonoBehaviour
                 int playersChecked = 0;
                 int totalPlayers = 2;
 
+                // First, perform PileInMove phase
+                fightPhaseState = FightPhaseState.PileInMove;
+
                 while (fightersLeft && playersChecked < totalPlayers)
                 {
                     var fightersForCurrentPlayer = availableFighters
@@ -269,8 +264,73 @@ public class FightController : MonoBehaviour
 
                     if (fightersForCurrentPlayer.Count > 0)
                     {
-                        // Start Attacks phase
-                        fightPhaseState = FightPhaseState.Attacks;
+                        gameController.ShowPlayerErrorMessage($"Player {currentPlayer}, select a model to perform a pile in move.");
+                        Debug.Log($"FightController: Prompting Player {currentPlayer} to select a model for pile in move.");
+
+                        yield return StartCoroutine(WaitForModelSelection());
+
+                        if (selectedModelForPileInMove != null)
+                        {
+                            Debug.Log($"FightController: Model {selectedModelForPileInMove.gameObject.name} selected for pile in move.");
+                            yield return StartCoroutine(HandlePileInMove(selectedModelForPileInMove));
+
+                            if (selectedModelForPileInMove != null)
+                            {
+                                usedFighters.Add(selectedModelForPileInMove);
+                                Debug.Log($"FightController: Model {selectedModelForPileInMove.gameObject.name} added to usedFighters.");
+                                selectedModelForPileInMove = null;
+                            }
+
+                            // Switch to the other player
+                            currentPlayer = (currentPlayer == 1) ? 2 : 1;
+                            Debug.Log($"FightController: Switched to Player {currentPlayer}.");
+                        }
+                        else
+                        {
+                            Debug.Log($"FightController: No model selected by Player {currentPlayer}.");
+                            currentPlayer = (currentPlayer == 1) ? 2 : 1;
+                            Debug.Log($"FightController: Switched to Player {currentPlayer}.");
+                        }
+                    }
+                    else
+                    {
+                        Debug.Log($"FightController: Player {currentPlayer} has no available fighters.");
+                        currentPlayer = (currentPlayer == 1) ? 2 : 1;
+                        Debug.Log($"FightController: Switched to Player {currentPlayer}.");
+                        playersChecked++;
+                    }
+
+                    var fightersForNextPlayer = availableFighters
+                        .Where(m => m.playerID == currentPlayer && !usedFighters.Contains(m))
+                        .ToList();
+
+                    if (fightersForNextPlayer.Count == 0)
+                    {
+                        playersChecked++;
+                    }
+                    else
+                    {
+                        playersChecked = 0;
+                    }
+
+                    fightersLeft = availableFighters.Any(m => !usedFighters.Contains(m));
+                }
+
+                // After PileInMove phase, proceed to Attacks phase
+                usedFighters.Clear();
+                fightPhaseState = FightPhaseState.Attacks;
+                fightersLeft = true;
+                playersChecked = 0;
+                currentPlayer = 1;
+
+                while (fightersLeft && playersChecked < totalPlayers)
+                {
+                    var fightersForCurrentPlayer = availableFighters
+                        .Where(m => m.playerID == currentPlayer && !usedFighters.Contains(m))
+                        .ToList();
+
+                    if (fightersForCurrentPlayer.Count > 0)
+                    {
                         foreach (var fighter in fightersForCurrentPlayer)
                         {
                             if (fighter.HasFought())
@@ -327,7 +387,7 @@ public class FightController : MonoBehaviour
 
                 // Resolve attacks after all models have fought
                 ResolveAttacks();
-                attackActions.Clear(); // Clear attacks for the next round
+                attackActions.Clear();
             }
 
             currentInitiativeRound--;
@@ -336,7 +396,6 @@ public class FightController : MonoBehaviour
             yield return null;
         }
 
-        // After all initiative rounds are resolved
         Debug.Log("FightController: All initiative rounds resolved for this fight.");
         gameController.ShowPlayerErrorMessage("Fight resolved.");
         Debug.Log("FightController: Fight resolved.");
