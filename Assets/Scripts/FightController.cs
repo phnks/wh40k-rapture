@@ -13,11 +13,15 @@ public class FightController : MonoBehaviour
     [Header("UI Elements")]
     public Button fightButton;
     public Button confirmPileInMoveButton;
+    public Button confirmConsolidationMoveButton; // New button for consolidation move
     public TextMeshProUGUI initiativeText;
-    public TextMeshProUGUI remainingAttacksText; // Text to display remaining attacks
+    public TextMeshProUGUI remainingAttacksText;
 
     [Header("Pile In Move")]
     public GameObject pileInMoveRangeIndicatorPrefab;
+
+    [Header("Consolidation Move")]
+    public GameObject consolidationMoveRangeIndicatorPrefab; // Prefab for consolidation move indicator
 
     private GameController gameController;
     private List<Fight> activeFights = new List<Fight>();
@@ -32,7 +36,7 @@ public class FightController : MonoBehaviour
     private int currentPlayer;
 
     private bool isResolvingFight = false;
-    private ModelController selectedModelForPileInMove = null;
+    private ModelController selectedModelForAction = null; // Use this variable for both pile-in and consolidation moves
     private GameObject currentPileInMoveIndicator = null;
 
     private Coroutine fightResolutionCoroutine;
@@ -43,7 +47,8 @@ public class FightController : MonoBehaviour
         SelectingFight,
         ResolvingInitiativeRound,
         PileInMove,
-        Attacks
+        Attacks,
+        ConsolidationMove // New state
     }
 
     private FightPhaseState fightPhaseState = FightPhaseState.None;
@@ -111,6 +116,18 @@ public class FightController : MonoBehaviour
             Debug.LogError("ConfirmPileInMoveButton is not assigned in the Inspector!");
         }
 
+        if (confirmConsolidationMoveButton != null)
+        {
+            confirmConsolidationMoveButton.onClick.RemoveAllListeners();
+            confirmConsolidationMoveButton.onClick.AddListener(ConfirmConsolidationMove);
+            confirmConsolidationMoveButton.gameObject.SetActive(false);
+            Debug.Log("Confirm Consolidation Move button listeners set and button hidden initially.");
+        }
+        else
+        {
+            Debug.LogError("ConfirmConsolidationMoveButton is not assigned in the Inspector!");
+        }
+
         if (initiativeText != null)
         {
             initiativeText.gameObject.SetActive(false);
@@ -128,6 +145,15 @@ public class FightController : MonoBehaviour
         else
         {
             Debug.Log("Pile In Move Range Indicator Prefab assigned.");
+        }
+
+        if (consolidationMoveRangeIndicatorPrefab == null)
+        {
+            Debug.LogError("ConsolidationMoveRangeIndicatorPrefab is not assigned in the Inspector!");
+        }
+        else
+        {
+            Debug.Log("Consolidation Move Range Indicator Prefab assigned.");
         }
 
         if (remainingAttacksText != null)
@@ -269,16 +295,16 @@ public class FightController : MonoBehaviour
 
                         yield return StartCoroutine(WaitForModelSelection());
 
-                        if (selectedModelForPileInMove != null)
+                        if (selectedModelForAction != null)
                         {
-                            Debug.Log($"FightController: Model {selectedModelForPileInMove.gameObject.name} selected for pile in move.");
-                            yield return StartCoroutine(HandlePileInMove(selectedModelForPileInMove));
+                            Debug.Log($"FightController: Model {selectedModelForAction.gameObject.name} selected for pile in move.");
+                            yield return StartCoroutine(HandlePileInMove(selectedModelForAction));
 
-                            if (selectedModelForPileInMove != null)
+                            if (selectedModelForAction != null)
                             {
-                                usedFighters.Add(selectedModelForPileInMove);
-                                Debug.Log($"FightController: Model {selectedModelForPileInMove.gameObject.name} added to usedFighters.");
-                                selectedModelForPileInMove = null;
+                                usedFighters.Add(selectedModelForAction);
+                                Debug.Log($"FightController: Model {selectedModelForAction.gameObject.name} added to usedFighters.");
+                                selectedModelForAction = null;
                             }
 
                             // Switch to the other player
@@ -344,12 +370,12 @@ public class FightController : MonoBehaviour
 
                             yield return StartCoroutine(WaitForModelSelectionForAttack(currentPlayer));
 
-                            if (selectedModelForPileInMove != null)
+                            if (selectedModelForAction != null)
                             {
-                                Debug.Log($"FightController: Model {selectedModelForPileInMove.gameObject.name} selected for attacks.");
-                                yield return StartCoroutine(HandleAttacks(selectedModelForPileInMove));
-                                usedFighters.Add(selectedModelForPileInMove);
-                                selectedModelForPileInMove = null;
+                                Debug.Log($"FightController: Model {selectedModelForAction.gameObject.name} selected for attacks.");
+                                yield return StartCoroutine(HandleAttacks(selectedModelForAction));
+                                usedFighters.Add(selectedModelForAction);
+                                selectedModelForAction = null;
 
                                 currentPlayer = (currentPlayer == 1) ? 2 : 1;
                                 Debug.Log($"FightController: Switched to Player {currentPlayer}.");
@@ -396,9 +422,26 @@ public class FightController : MonoBehaviour
             yield return null;
         }
 
+        // After all initiative rounds are resolved
         Debug.Log("FightController: All initiative rounds resolved for this fight.");
         gameController.ShowPlayerErrorMessage("Fight resolved.");
         Debug.Log("FightController: Fight resolved.");
+
+        // Check for fight winner
+        int winnerPlayerID = CheckForFightWinner();
+        if (winnerPlayerID != -1)
+        {
+            Debug.Log($"FightController: Player {winnerPlayerID} won the fight.");
+            // Start consolidation move
+            fightPhaseState = FightPhaseState.ConsolidationMove;
+            currentPlayer = winnerPlayerID;
+            usedFighters = new HashSet<ModelController>();
+            yield return StartCoroutine(HandleConsolidationMoves());
+        }
+        else
+        {
+            Debug.Log("FightController: The fight ended in a tie. No consolidation moves.");
+        }
 
         activeFights.Remove(selectedFight);
         Debug.Log($"FightController: Fight removed from activeFights. Remaining fights: {activeFights.Count}.");
@@ -425,12 +468,152 @@ public class FightController : MonoBehaviour
         yield break;
     }
 
+    private int CheckForFightWinner()
+    {
+        HashSet<int> playersInFight = new HashSet<int>();
+        foreach (var model in selectedFight.participants)
+        {
+            playersInFight.Add(model.playerID);
+        }
+
+        // Check if any player has all their models destroyed
+        List<int> playersWithModelsRemaining = new List<int>();
+        foreach (int playerID in playersInFight)
+        {
+            bool hasModelsRemaining = selectedFight.participants.Any(m => m.playerID == playerID && !m.IsDestroyed());
+            if (hasModelsRemaining)
+            {
+                playersWithModelsRemaining.Add(playerID);
+            }
+        }
+
+        if (playersWithModelsRemaining.Count == 1)
+        {
+            // We have a winner
+            return playersWithModelsRemaining[0];
+        }
+        else
+        {
+            // Tie or no models left
+            return -1;
+        }
+    }
+
+    private IEnumerator HandleConsolidationMoves()
+    {
+        Debug.Log($"FightController: Starting consolidation moves for Player {currentPlayer}.");
+        gameController.ShowPlayerErrorMessage($"Player {currentPlayer}, perform consolidation moves.");
+
+        var modelsToConsolidate = selectedFight.participants
+            .Where(m => m.playerID == currentPlayer && !m.IsDestroyed())
+            .ToList();
+
+        usedFighters.Clear();
+
+        while (modelsToConsolidate.Any(m => !usedFighters.Contains(m)))
+        {
+            gameController.ShowPlayerErrorMessage($"Player {currentPlayer}, select a model to consolidate.");
+            Debug.Log($"FightController: Prompting Player {currentPlayer} to select a model to consolidate.");
+
+            selectedModelForAction = null;
+
+            // Wait for player to select a model
+            while (selectedModelForAction == null)
+            {
+                if (Input.GetMouseButtonDown(0) && !UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject())
+                {
+                    Vector3 screenCenter = new Vector3(Screen.width / 2, Screen.height / 2, 0);
+                    Ray ray = Camera.main.ScreenPointToRay(screenCenter);
+                    RaycastHit hit;
+
+                    if (Physics.Raycast(ray, out hit, 2000f))
+                    {
+                        ModelController clickedModel = hit.transform.GetComponent<ModelController>();
+                        if (clickedModel != null && clickedModel.playerID == currentPlayer && modelsToConsolidate.Contains(clickedModel) && !usedFighters.Contains(clickedModel))
+                        {
+                            selectedModelForAction = clickedModel;
+                            gameController.SelectModel(clickedModel);
+                            break;
+                        }
+                        else
+                        {
+                            gameController.ShowPlayerErrorMessage("Select one of your models from the fight to consolidate.");
+                            Debug.Log("Invalid model selected for consolidation.");
+                        }
+                    }
+                }
+                yield return null;
+            }
+
+            if (selectedModelForAction != null)
+            {
+                yield return StartCoroutine(HandleConsolidationMove(selectedModelForAction));
+                usedFighters.Add(selectedModelForAction);
+                selectedModelForAction = null;
+            }
+        }
+
+        fightPhaseState = FightPhaseState.SelectingFight;
+        Debug.Log("FightController: Consolidation moves completed.");
+        yield break;
+    }
+
+    private IEnumerator HandleConsolidationMove(ModelController model)
+    {
+        Debug.Log($"FightController: Handling consolidation move for {model.gameObject.name}.");
+
+        // Show consolidation move indicator
+        model.ShowConsolidationMoveIndicator();
+
+        confirmConsolidationMoveButton.gameObject.SetActive(true);
+
+        bool moveConfirmed = false;
+        confirmConsolidationMoveButtonPressed = false;
+
+        while (!moveConfirmed)
+        {
+            if (Input.GetMouseButtonDown(0) && !UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject())
+            {
+                Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
+                RaycastHit hit;
+
+                if (Physics.Raycast(ray, out hit, 2000f))
+                {
+                    if (hit.collider.CompareTag("Ground"))
+                    {
+                        Vector3 targetPosition = hit.point;
+                        model.MoveToConsolidation(targetPosition);
+                    }
+                }
+            }
+
+            if (confirmConsolidationMoveButtonPressed)
+            {
+                moveConfirmed = true;
+                confirmConsolidationMoveButtonPressed = false;
+                confirmConsolidationMoveButton.gameObject.SetActive(false);
+                model.HideConsolidationMoveIndicator();
+                gameController.DeselectAllModels();
+                Debug.Log($"FightController: Consolidation move confirmed for {model.gameObject.name}.");
+            }
+            yield return null;
+        }
+    }
+
+    private bool confirmConsolidationMoveButtonPressed = false;
+
+    private void ConfirmConsolidationMove()
+    {
+        confirmConsolidationMoveButtonPressed = true;
+        Debug.Log("FightController: Consolidation move confirmed.");
+    }
+
     private IEnumerator WaitForModelSelectionForAttack(int playerID)
     {
-        selectedModelForPileInMove = null;
+        selectedModelForAction = null;
         Debug.Log("FightController: Waiting for model selection for attack.");
 
-        while (selectedModelForPileInMove == null && fightPhaseState == FightPhaseState.Attacks)
+        while (selectedModelForAction == null && fightPhaseState == FightPhaseState.Attacks)
         {
             if (Input.GetMouseButtonDown(0) && !UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject())
             {
@@ -445,7 +628,7 @@ public class FightController : MonoBehaviour
                     ModelController clickedModel = hit.transform.GetComponent<ModelController>();
                     if (clickedModel != null && availableFighters.Contains(clickedModel) && clickedModel.playerID == playerID && !clickedModel.HasFought())
                     {
-                        selectedModelForPileInMove = clickedModel;
+                        selectedModelForAction = clickedModel;
                         Debug.Log($"FightController: Model {clickedModel.gameObject.name} selected for attacks.");
 
                         gameController.SelectModel(clickedModel);
@@ -655,10 +838,10 @@ public class FightController : MonoBehaviour
     /// </summary>
     private IEnumerator WaitForModelSelection()
     {
-        selectedModelForPileInMove = null;
+        selectedModelForAction = null;
         Debug.Log("FightController: Waiting for model selection for pile in move.");
 
-        while (selectedModelForPileInMove == null && fightPhaseState == FightPhaseState.PileInMove)
+        while (selectedModelForAction == null && fightPhaseState == FightPhaseState.PileInMove)
         {
             if (Input.GetMouseButtonDown(0) && !UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject())
             {
@@ -673,7 +856,7 @@ public class FightController : MonoBehaviour
                     ModelController clickedModel = hit.transform.GetComponent<ModelController>();
                     if (clickedModel != null && availableFighters.Contains(clickedModel) && clickedModel.playerID == currentPlayer)
                     {
-                        selectedModelForPileInMove = clickedModel;
+                        selectedModelForAction = clickedModel;
                         Debug.Log($"FightController: Model {clickedModel.gameObject.name} selected for pile in move.");
                         // Show the "Confirm Pile In Move" button immediately after selection
                         confirmPileInMoveButton.gameObject.SetActive(true);
@@ -828,13 +1011,13 @@ public class FightController : MonoBehaviour
         gameController.ShowPlayerErrorMessage("Pile in move confirmed.");
         Debug.Log("FightController: Pile in move confirmed.");
 
-        if (selectedModelForPileInMove != null)
+        if (selectedModelForAction != null)
         {
             // If a pile in move was performed, it has already been handled in HandlePileInMove
             // So just mark the fighter as used
-            usedFighters.Add(selectedModelForPileInMove);
-            Debug.Log($"FightController: Model {selectedModelForPileInMove.gameObject.name} confirmed without additional move.");
-            selectedModelForPileInMove = null;
+            usedFighters.Add(selectedModelForAction);
+            Debug.Log($"FightController: Model {selectedModelForAction.gameObject.name} confirmed without additional move.");
+            selectedModelForAction = null;
         }
         else
         {

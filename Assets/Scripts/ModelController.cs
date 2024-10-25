@@ -51,6 +51,7 @@ public class ModelController : MonoBehaviour
     private GameObject marchRangeIndicator;
     private GameObject chargeRangeIndicator;
     private GameObject moveIndicator;
+    private GameObject consolidationMoveIndicator; // New indicator
 
     private List<WeaponController> weapons = new List<WeaponController>();
 
@@ -662,6 +663,62 @@ public class ModelController : MonoBehaviour
     public void ResetFightPhaseStatus()
     {
         hasFought = false;
+    }
+    
+    public void ShowConsolidationMoveIndicator()
+    {
+        if (consolidationMoveIndicator == null)
+        {
+            consolidationMoveIndicator = Instantiate(GameController.Instance.movementRangeIndicatorPrefab, transform.position + Vector3.up * 60f, Quaternion.identity);
+            float consolidationRange = initiative * GameConstants.MOVEMENT_CONVERSION_FACTOR;
+            consolidationMoveIndicator.transform.localScale = new Vector3(consolidationRange * 2, 0.01f, consolidationRange * 2);
+            Renderer rangeRenderer = consolidationMoveIndicator.GetComponent<Renderer>();
+            Color factionColor = GetFactionColor();
+            rangeRenderer.material.color = new Color(factionColor.r, factionColor.g, factionColor.b, 0.3f);
+        }
+        consolidationMoveIndicator.SetActive(true);
+        consolidationMoveIndicator.transform.position = new Vector3(transform.position.x, 60f, transform.position.z);
+        Debug.Log($"Consolidation move indicator shown for {gameObject.name}.");
+    }
+
+    public void HideConsolidationMoveIndicator()
+    {
+        if (consolidationMoveIndicator != null)
+        {
+            consolidationMoveIndicator.SetActive(false);
+            Debug.Log($"Consolidation move indicator hidden for {gameObject.name}.");
+        }
+    }
+
+    public void MoveToConsolidation(Vector3 targetPosition)
+    {
+        // Ensure Y remains constant
+        targetPosition.y = transform.position.y;
+
+        Vector3 startPosXZ = new Vector3(startPosition.x, 0, startPosition.z);
+        Vector3 targetPosXZ = new Vector3(targetPosition.x, 0, targetPosition.z);
+        float moveDistance = Vector3.Distance(startPosXZ, targetPosXZ);
+
+        float maxConsolidationRange = initiative * GameConstants.MOVEMENT_CONVERSION_FACTOR;
+
+        if (moveDistance > maxConsolidationRange)
+        {
+            GameController.Instance.ShowPlayerErrorMessage("Cannot move beyond consolidation range.");
+            Debug.Log("Attempted to move beyond consolidation range.");
+            return;
+        }
+
+        StartCoroutine(MoveToPosition(targetPosition));
+
+        // Update consolidation move indicator
+        if (consolidationMoveIndicator != null)
+        {
+            consolidationMoveIndicator.transform.position = new Vector3(transform.position.x, 60f, transform.position.z);
+            float remainingConsolidationRange = maxConsolidationRange - moveDistance;
+            float indicatorScale = remainingConsolidationRange * 2;
+            consolidationMoveIndicator.transform.localScale = new Vector3(indicatorScale, 0.01f, indicatorScale);
+            Debug.Log($"Updated consolidation move indicator for {gameObject.name}.");
+        }
     }
 }
 
