@@ -558,47 +558,49 @@ public class FightController : MonoBehaviour
         yield break;
     }
 
-    private IEnumerator HandleConsolidationMove(ModelController model)
+private IEnumerator HandleConsolidationMove(ModelController model)
+{
+    Debug.Log($"FightController: Handling consolidation move for {model.gameObject.name}.");
+
+    // Show consolidation move indicator
+    model.ShowConsolidationMoveIndicator();
+
+    confirmConsolidationMoveButton.gameObject.SetActive(true);
+
+    bool moveConfirmed = false;
+    confirmConsolidationMoveButtonPressed = false;
+
+    while (!moveConfirmed)
     {
-        Debug.Log($"FightController: Handling consolidation move for {model.gameObject.name}.");
-
-        // Show consolidation move indicator
-        model.ShowConsolidationMoveIndicator();
-
-        confirmConsolidationMoveButton.gameObject.SetActive(true);
-
-        bool moveConfirmed = false;
-        confirmConsolidationMoveButtonPressed = false;
-
-        while (!moveConfirmed)
+        if (Input.GetMouseButtonDown(0) && !UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject())
         {
-            if (Input.GetMouseButtonDown(0) && !UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject())
-            {
-                Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
-                RaycastHit hit;
+            Vector3 screenCenter = new Vector3(Screen.width / 2, Screen.height / 2, 0);
+            Ray ray = Camera.main.ScreenPointToRay(screenCenter);
+            RaycastHit hit;
 
-                if (Physics.Raycast(ray, out hit, 2000f))
+            if (Physics.Raycast(ray, out hit, 2000f))
+            {
+                if (hit.collider.CompareTag("Ground"))
                 {
-                    if (hit.collider.CompareTag("Ground"))
-                    {
-                        Vector3 targetPosition = hit.point;
-                        model.MoveToConsolidation(targetPosition);
-                    }
+                    Vector3 targetPosition = hit.point;
+                    model.MoveToConsolidation(targetPosition);
                 }
             }
-
-            if (confirmConsolidationMoveButtonPressed)
-            {
-                moveConfirmed = true;
-                confirmConsolidationMoveButtonPressed = false;
-                confirmConsolidationMoveButton.gameObject.SetActive(false);
-                model.HideConsolidationMoveIndicator();
-                gameController.DeselectAllModels();
-                Debug.Log($"FightController: Consolidation move confirmed for {model.gameObject.name}.");
-            }
-            yield return null;
         }
+
+        if (confirmConsolidationMoveButtonPressed)
+        {
+            moveConfirmed = true;
+            confirmConsolidationMoveButtonPressed = false;
+            confirmConsolidationMoveButton.gameObject.SetActive(false);
+            model.HideConsolidationMoveIndicator();
+            gameController.DeselectAllModels();
+            Debug.Log($"FightController: Consolidation move confirmed for {model.gameObject.name}.");
+        }
+        yield return null;
     }
+}
+
 
     private bool confirmConsolidationMoveButtonPressed = false;
 

@@ -52,6 +52,8 @@ public class ModelController : MonoBehaviour
     private GameObject chargeRangeIndicator;
     private GameObject moveIndicator;
     private GameObject consolidationMoveIndicator; // New indicator
+    
+    private Vector3 consolidationStartPosition;
 
     private List<WeaponController> weapons = new List<WeaponController>();
 
@@ -665,21 +667,26 @@ public class ModelController : MonoBehaviour
         hasFought = false;
     }
     
-    public void ShowConsolidationMoveIndicator()
+public void ShowConsolidationMoveIndicator()
+{
+    if (consolidationMoveIndicator == null)
     {
-        if (consolidationMoveIndicator == null)
-        {
-            consolidationMoveIndicator = Instantiate(GameController.Instance.movementRangeIndicatorPrefab, transform.position + Vector3.up * 60f, Quaternion.identity);
-            float consolidationRange = initiative * GameConstants.MOVEMENT_CONVERSION_FACTOR;
-            consolidationMoveIndicator.transform.localScale = new Vector3(consolidationRange * 2, 0.01f, consolidationRange * 2);
-            Renderer rangeRenderer = consolidationMoveIndicator.GetComponent<Renderer>();
-            Color factionColor = GetFactionColor();
-            rangeRenderer.material.color = new Color(factionColor.r, factionColor.g, factionColor.b, 0.3f);
-        }
-        consolidationMoveIndicator.SetActive(true);
-        consolidationMoveIndicator.transform.position = new Vector3(transform.position.x, 60f, transform.position.z);
-        Debug.Log($"Consolidation move indicator shown for {gameObject.name}.");
+        consolidationMoveIndicator = Instantiate(GameController.Instance.movementRangeIndicatorPrefab, transform.position + Vector3.up * 60f, Quaternion.identity);
+        float consolidationRange = initiative * GameConstants.MOVEMENT_CONVERSION_FACTOR;
+        consolidationMoveIndicator.transform.localScale = new Vector3(consolidationRange * 2, 0.01f, consolidationRange * 2);
+        Renderer rangeRenderer = consolidationMoveIndicator.GetComponent<Renderer>();
+        Color factionColor = GetFactionColor();
+        rangeRenderer.material.color = new Color(factionColor.r, factionColor.g, factionColor.b, 0.3f);
     }
+    consolidationMoveIndicator.SetActive(true);
+    consolidationMoveIndicator.transform.position = new Vector3(transform.position.x, 60f, transform.position.z);
+
+    // Initialize the consolidation start position
+    consolidationStartPosition = transform.position;
+
+    Debug.Log($"Consolidation move indicator shown for {gameObject.name}.");
+}
+
 
     public void HideConsolidationMoveIndicator()
     {
@@ -690,35 +697,43 @@ public class ModelController : MonoBehaviour
         }
     }
 
-    public void MoveToConsolidation(Vector3 targetPosition)
+public void MoveToConsolidation(Vector3 targetPosition)
+{
+    // Ensure Y remains constant
+    targetPosition.y = transform.position.y;
+
+    Vector3 startPosXZ = new Vector3(consolidationStartPosition.x, 0, consolidationStartPosition.z);
+    Vector3 targetPosXZ = new Vector3(targetPosition.x, 0, targetPosition.z);
+    float moveDistance = Vector3.Distance(startPosXZ, targetPosXZ);
+
+    float maxConsolidationRange = initiative * GameConstants.MOVEMENT_CONVERSION_FACTOR;
+
+    // Debug logs to display distances
+    Debug.Log($"Consolidation Move - Model: {gameObject.name}");
+    Debug.Log($"Start Position: {startPosXZ}, Target Position: {targetPosXZ}");
+    Debug.Log($"Move Distance from Start: {moveDistance}, Max Consolidation Range: {maxConsolidationRange}");
+
+    if (moveDistance > maxConsolidationRange)
     {
-        // Ensure Y remains constant
-        targetPosition.y = transform.position.y;
-
-        Vector3 startPosXZ = new Vector3(startPosition.x, 0, startPosition.z);
-        Vector3 targetPosXZ = new Vector3(targetPosition.x, 0, targetPosition.z);
-        float moveDistance = Vector3.Distance(startPosXZ, targetPosXZ);
-
-        float maxConsolidationRange = initiative * GameConstants.MOVEMENT_CONVERSION_FACTOR;
-
-        if (moveDistance > maxConsolidationRange)
-        {
-            GameController.Instance.ShowPlayerErrorMessage("Cannot move beyond consolidation range.");
-            Debug.Log("Attempted to move beyond consolidation range.");
-            return;
-        }
-
-        StartCoroutine(MoveToPosition(targetPosition));
-
-        // Update consolidation move indicator
-        if (consolidationMoveIndicator != null)
-        {
-            consolidationMoveIndicator.transform.position = new Vector3(transform.position.x, 60f, transform.position.z);
-            float remainingConsolidationRange = maxConsolidationRange - moveDistance;
-            float indicatorScale = remainingConsolidationRange * 2;
-            consolidationMoveIndicator.transform.localScale = new Vector3(indicatorScale, 0.01f, indicatorScale);
-            Debug.Log($"Updated consolidation move indicator for {gameObject.name}.");
-        }
+        GameController.Instance.ShowPlayerErrorMessage("Cannot move beyond consolidation range.");
+        Debug.Log("Attempted to move beyond consolidation range.");
+        return;
     }
+
+    // Move the model
+    StartCoroutine(MoveToPosition(targetPosition));
+
+    // Update consolidation move indicator
+    if (consolidationMoveIndicator != null)
+    {
+        consolidationMoveIndicator.transform.position = new Vector3(transform.position.x, 60f, transform.position.z);
+        float remainingConsolidationRange = maxConsolidationRange - moveDistance;
+        float indicatorScale = remainingConsolidationRange * 2;
+        consolidationMoveIndicator.transform.localScale = new Vector3(indicatorScale, 0.01f, indicatorScale);
+        Debug.Log($"Updated consolidation move indicator for {gameObject.name}. Remaining Range: {remainingConsolidationRange}");
+    }
+}
+
+
 }
 
